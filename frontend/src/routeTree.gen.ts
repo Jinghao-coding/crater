@@ -30,6 +30,7 @@ import { Route as PortalUsersIndexRouteImport } from './routes/portal/users/inde
 import { Route as PortalTemplatesIndexRouteImport } from './routes/portal/templates/index'
 import { Route as PortalOverviewIndexRouteImport } from './routes/portal/overview/index'
 import { Route as PortalMoreIndexRouteImport } from './routes/portal/more/index'
+import { Route as PortalInferenceServicesIndexRouteImport } from './routes/portal/inference-services/index'
 import { Route as AdminUsersIndexRouteImport } from './routes/admin/users/index'
 import { Route as AdminStatisticsIndexRouteImport } from './routes/admin/statistics/index'
 import { Route as AdminOperationLogsIndexRouteImport } from './routes/admin/operation-logs/index'
@@ -46,6 +47,8 @@ import { Route as PortalMoreUserRouteImport } from './routes/portal/more/user'
 import { Route as PortalMonitorNetworkRouteImport } from './routes/portal/monitor/network'
 import { Route as PortalMonitorIdleRouteImport } from './routes/portal/monitor/idle'
 import { Route as PortalMonitorGpuRouteImport } from './routes/portal/monitor/gpu'
+import { Route as PortalInferenceServicesNewRouteImport } from './routes/portal/inference-services/new'
+import { Route as PortalInferenceServicesNameRouteImport } from './routes/portal/inference-services/$name'
 import { Route as PortalFilesSplatRouteImport } from './routes/portal/files/$'
 import { Route as PortalAccountStatisticsRouteImport } from './routes/portal/account/statistics'
 import { Route as PortalAccountMemberRouteImport } from './routes/portal/account/member'
@@ -211,6 +214,12 @@ const PortalMoreIndexRoute = PortalMoreIndexRouteImport.update({
   path: '/',
   getParentRoute: () => PortalMoreRouteRoute,
 } as any)
+const PortalInferenceServicesIndexRoute =
+  PortalInferenceServicesIndexRouteImport.update({
+    id: '/inference-services/',
+    path: '/inference-services/',
+    getParentRoute: () => PortalRouteRoute,
+  } as any)
 const AdminUsersIndexRoute = AdminUsersIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -291,6 +300,18 @@ const PortalMonitorGpuRoute = PortalMonitorGpuRouteImport.update({
   path: '/monitor/gpu',
   getParentRoute: () => PortalRouteRoute,
 } as any)
+const PortalInferenceServicesNewRoute =
+  PortalInferenceServicesNewRouteImport.update({
+    id: '/inference-services/new',
+    path: '/inference-services/new',
+    getParentRoute: () => PortalRouteRoute,
+  } as any)
+const PortalInferenceServicesNameRoute =
+  PortalInferenceServicesNameRouteImport.update({
+    id: '/inference-services/$name',
+    path: '/inference-services/$name',
+    getParentRoute: () => PortalRouteRoute,
+  } as any)
 const PortalFilesSplatRoute = PortalFilesSplatRouteImport.update({
   id: '/files/$',
   path: '/files/$',
@@ -639,6 +660,8 @@ export interface FileRoutesByFullPath {
   '/portal/account/member': typeof PortalAccountMemberRoute
   '/portal/account/statistics': typeof PortalAccountStatisticsRoute
   '/portal/files/$': typeof PortalFilesSplatRoute
+  '/portal/inference-services/$name': typeof PortalInferenceServicesNameRoute
+  '/portal/inference-services/new': typeof PortalInferenceServicesNewRoute
   '/portal/monitor/gpu': typeof PortalMonitorGpuRoute
   '/portal/monitor/idle': typeof PortalMonitorIdleRoute
   '/portal/monitor/network': typeof PortalMonitorNetworkRoute
@@ -655,6 +678,7 @@ export interface FileRoutesByFullPath {
   '/admin/operation-logs': typeof AdminOperationLogsIndexRoute
   '/admin/statistics/': typeof AdminStatisticsIndexRoute
   '/admin/users/': typeof AdminUsersIndexRoute
+  '/portal/inference-services': typeof PortalInferenceServicesIndexRoute
   '/portal/more/': typeof PortalMoreIndexRoute
   '/portal/overview/': typeof PortalOverviewIndexRoute
   '/portal/templates/': typeof PortalTemplatesIndexRoute
@@ -716,6 +740,8 @@ export interface FileRoutesByTo {
   '/portal/account/member': typeof PortalAccountMemberRoute
   '/portal/account/statistics': typeof PortalAccountStatisticsRoute
   '/portal/files/$': typeof PortalFilesSplatRoute
+  '/portal/inference-services/$name': typeof PortalInferenceServicesNameRoute
+  '/portal/inference-services/new': typeof PortalInferenceServicesNewRoute
   '/portal/monitor/gpu': typeof PortalMonitorGpuRoute
   '/portal/monitor/idle': typeof PortalMonitorIdleRoute
   '/portal/monitor/network': typeof PortalMonitorNetworkRoute
@@ -732,6 +758,7 @@ export interface FileRoutesByTo {
   '/admin/operation-logs': typeof AdminOperationLogsIndexRoute
   '/admin/statistics': typeof AdminStatisticsIndexRoute
   '/admin/users': typeof AdminUsersIndexRoute
+  '/portal/inference-services': typeof PortalInferenceServicesIndexRoute
   '/portal/more': typeof PortalMoreIndexRoute
   '/portal/overview': typeof PortalOverviewIndexRoute
   '/portal/templates': typeof PortalTemplatesIndexRoute
@@ -815,6 +842,8 @@ export interface FileRoutesById {
   '/portal/account/member': typeof PortalAccountMemberRoute
   '/portal/account/statistics': typeof PortalAccountStatisticsRoute
   '/portal/files/$': typeof PortalFilesSplatRoute
+  '/portal/inference-services/$name': typeof PortalInferenceServicesNameRoute
+  '/portal/inference-services/new': typeof PortalInferenceServicesNewRoute
   '/portal/monitor/gpu': typeof PortalMonitorGpuRoute
   '/portal/monitor/idle': typeof PortalMonitorIdleRoute
   '/portal/monitor/network': typeof PortalMonitorNetworkRoute
@@ -831,6 +860,7 @@ export interface FileRoutesById {
   '/admin/operation-logs/': typeof AdminOperationLogsIndexRoute
   '/admin/statistics/': typeof AdminStatisticsIndexRoute
   '/admin/users/': typeof AdminUsersIndexRoute
+  '/portal/inference-services/': typeof PortalInferenceServicesIndexRoute
   '/portal/more/': typeof PortalMoreIndexRoute
   '/portal/overview/': typeof PortalOverviewIndexRoute
   '/portal/templates/': typeof PortalTemplatesIndexRoute
@@ -915,6 +945,8 @@ export interface FileRouteTypes {
     | '/portal/account/member'
     | '/portal/account/statistics'
     | '/portal/files/$'
+    | '/portal/inference-services/$name'
+    | '/portal/inference-services/new'
     | '/portal/monitor/gpu'
     | '/portal/monitor/idle'
     | '/portal/monitor/network'
@@ -931,6 +963,7 @@ export interface FileRouteTypes {
     | '/admin/operation-logs'
     | '/admin/statistics/'
     | '/admin/users/'
+    | '/portal/inference-services'
     | '/portal/more/'
     | '/portal/overview/'
     | '/portal/templates/'
@@ -992,6 +1025,8 @@ export interface FileRouteTypes {
     | '/portal/account/member'
     | '/portal/account/statistics'
     | '/portal/files/$'
+    | '/portal/inference-services/$name'
+    | '/portal/inference-services/new'
     | '/portal/monitor/gpu'
     | '/portal/monitor/idle'
     | '/portal/monitor/network'
@@ -1008,6 +1043,7 @@ export interface FileRouteTypes {
     | '/admin/operation-logs'
     | '/admin/statistics'
     | '/admin/users'
+    | '/portal/inference-services'
     | '/portal/more'
     | '/portal/overview'
     | '/portal/templates'
@@ -1090,6 +1126,8 @@ export interface FileRouteTypes {
     | '/portal/account/member'
     | '/portal/account/statistics'
     | '/portal/files/$'
+    | '/portal/inference-services/$name'
+    | '/portal/inference-services/new'
     | '/portal/monitor/gpu'
     | '/portal/monitor/idle'
     | '/portal/monitor/network'
@@ -1106,6 +1144,7 @@ export interface FileRouteTypes {
     | '/admin/operation-logs/'
     | '/admin/statistics/'
     | '/admin/users/'
+    | '/portal/inference-services/'
     | '/portal/more/'
     | '/portal/overview/'
     | '/portal/templates/'
@@ -1304,6 +1343,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalMoreIndexRouteImport
       parentRoute: typeof PortalMoreRouteRoute
     }
+    '/portal/inference-services/': {
+      id: '/portal/inference-services/'
+      path: '/inference-services'
+      fullPath: '/portal/inference-services'
+      preLoaderRoute: typeof PortalInferenceServicesIndexRouteImport
+      parentRoute: typeof PortalRouteRoute
+    }
     '/admin/users/': {
       id: '/admin/users/'
       path: '/'
@@ -1414,6 +1460,20 @@ declare module '@tanstack/react-router' {
       path: '/monitor/gpu'
       fullPath: '/portal/monitor/gpu'
       preLoaderRoute: typeof PortalMonitorGpuRouteImport
+      parentRoute: typeof PortalRouteRoute
+    }
+    '/portal/inference-services/new': {
+      id: '/portal/inference-services/new'
+      path: '/inference-services/new'
+      fullPath: '/portal/inference-services/new'
+      preLoaderRoute: typeof PortalInferenceServicesNewRouteImport
+      parentRoute: typeof PortalRouteRoute
+    }
+    '/portal/inference-services/$name': {
+      id: '/portal/inference-services/$name'
+      path: '/inference-services/$name'
+      fullPath: '/portal/inference-services/$name'
+      preLoaderRoute: typeof PortalInferenceServicesNameRouteImport
       parentRoute: typeof PortalRouteRoute
     }
     '/portal/files/$': {
@@ -2225,9 +2285,12 @@ interface PortalRouteRouteChildren {
   PortalJobsDetailRouteRoute: typeof PortalJobsDetailRouteRouteWithChildren
   PortalJobsNewRouteRoute: typeof PortalJobsNewRouteRouteWithChildren
   PortalFilesSplatRoute: typeof PortalFilesSplatRoute
+  PortalInferenceServicesNameRoute: typeof PortalInferenceServicesNameRoute
+  PortalInferenceServicesNewRoute: typeof PortalInferenceServicesNewRoute
   PortalMonitorGpuRoute: typeof PortalMonitorGpuRoute
   PortalMonitorIdleRoute: typeof PortalMonitorIdleRoute
   PortalMonitorNetworkRoute: typeof PortalMonitorNetworkRoute
+  PortalInferenceServicesIndexRoute: typeof PortalInferenceServicesIndexRoute
   PortalEnvImagesIndexRoute: typeof PortalEnvImagesIndexRoute
   PortalJobsCustomIndexRoute: typeof PortalJobsCustomIndexRoute
   PortalJobsInterIndexRoute: typeof PortalJobsInterIndexRoute
@@ -2247,9 +2310,12 @@ const PortalRouteRouteChildren: PortalRouteRouteChildren = {
   PortalJobsDetailRouteRoute: PortalJobsDetailRouteRouteWithChildren,
   PortalJobsNewRouteRoute: PortalJobsNewRouteRouteWithChildren,
   PortalFilesSplatRoute: PortalFilesSplatRoute,
+  PortalInferenceServicesNameRoute: PortalInferenceServicesNameRoute,
+  PortalInferenceServicesNewRoute: PortalInferenceServicesNewRoute,
   PortalMonitorGpuRoute: PortalMonitorGpuRoute,
   PortalMonitorIdleRoute: PortalMonitorIdleRoute,
   PortalMonitorNetworkRoute: PortalMonitorNetworkRoute,
+  PortalInferenceServicesIndexRoute: PortalInferenceServicesIndexRoute,
   PortalEnvImagesIndexRoute: PortalEnvImagesIndexRoute,
   PortalJobsCustomIndexRoute: PortalJobsCustomIndexRoute,
   PortalJobsInterIndexRoute: PortalJobsInterIndexRoute,
