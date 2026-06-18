@@ -1,0 +1,36 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "695b5be45d16d11e5e0359ee6d882a03cd9f8eb7",
+  "prompts": {},
+  "humans": {
+    "h_38eeec51131a30": {
+      "author": "Jinghao-coding <jeffery_06@163.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {
+    "s_89725cda8b66cb": {
+      "tool": "trae",
+      "conversation_id": "6a300e3ae3e972addaf572ba",
+      "session_id": "6a300e3ae3e972addaf572ba",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_89725cda8b66cb::t_29a74c97e4d8a3": {
+      "tool": "trae",
+      "conversation_id": "6a300e3ae3e972addaf572ba",
+      "session_id": "6a300e3ae3e972addaf572ba",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_89725cda8b66cb::t_50d6cb42e9a0bc": {
+      "tool": "trae",
+      "conversation_id": "6a300e3ae3e972addaf572ba",
+      "session_id": "6a300e3ae3e972addaf572ba",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    }
+  }
+}
