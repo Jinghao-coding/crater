@@ -22,6 +22,7 @@ import (
 
 	"github.com/raids-lab/crater/dao/model"
 	"github.com/raids-lab/crater/dao/query"
+	"github.com/raids-lab/crater/internal/bizerr"
 	"github.com/raids-lab/crater/internal/handler"
 	"github.com/raids-lab/crater/internal/handler/vcjob"
 	interpayload "github.com/raids-lab/crater/internal/payload"
@@ -317,7 +318,7 @@ func (mgr *AIJobMgr) ListUserJob(c *gin.Context) {
 	token := interutil.GetToken(c)
 	taskModels, err := mgr.taskService.ListByQueue(token.AccountName)
 	if err != nil {
-		resputil.Error(c, fmt.Sprintf("list task failed, err %v", err), resputil.NotSpecified)
+		resputil.HandleError(c, bizerr.Internal.DatabaseError.Wrap(err, "list task"))
 		return
 	}
 
@@ -332,7 +333,7 @@ func (mgr *AIJobMgr) ListUserJob(c *gin.Context) {
 func (mgr *AIJobMgr) ListAllJob(c *gin.Context) {
 	taskModels, err := mgr.taskService.ListAll()
 	if err != nil {
-		resputil.Error(c, fmt.Sprintf("list task failed, err %v", err), resputil.NotSpecified)
+		resputil.HandleError(c, bizerr.Internal.DatabaseError.Wrap(err, "list task"))
 		return
 	}
 
