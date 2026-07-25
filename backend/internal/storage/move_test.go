@@ -121,6 +121,7 @@ func TestMoveStorageEntryReportsMissingSource(t *testing.T) {
 	}
 }
 
+//nolint:gocyclo // This concurrency test counts winners, conflicts, and remaining sources in one assertion.
 func TestMoveStorageEntryRaceHasOneWinner(t *testing.T) {
 	storage := t.TempDir()
 	const contenders = 8
@@ -132,13 +133,19 @@ func TestMoveStorageEntryRaceHasOneWinner(t *testing.T) {
 	}
 
 	roots := make([]*os.Root, contenders)
+	t.Cleanup(func() {
+		for _, root := range roots {
+			if root != nil {
+				_ = root.Close()
+			}
+		}
+	})
 	for index := range roots {
 		root, err := os.OpenRoot(storage)
 		if err != nil {
 			t.Fatal(err)
 		}
 		roots[index] = root
-		defer root.Close()
 	}
 
 	var wait sync.WaitGroup
@@ -249,7 +256,7 @@ func TestMoveFileHandlerHTTPContract(t *testing.T) {
 		mutate      func(*testing.T, string, *moveFileHandlerDeps)
 	}{
 		{
-			name: "invalid source", source: "user", destination: "user/archive/result.txt",
+			name: "invalid source", source: testLogicalUserRoot, destination: "user/archive/result.txt",
 			wantStatus: http.StatusBadRequest, wantCode: 40004,
 		},
 		{
@@ -414,7 +421,7 @@ func TestRegisterRoutesServesMKCOLEndpoint(t *testing.T) {
 	router := gin.New()
 	RegisterRoutes(router)
 
-	request := httptest.NewRequest("MKCOL", "/api/ss/user/new-directory", nil)
+	request := httptest.NewRequest("MKCOL", "/api/ss/user/new-directory", http.NoBody)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
 	assertMoveEnvelope(t, recorder, http.StatusUnauthorized, 40102)
@@ -442,11 +449,11 @@ func testMoveHandlerDeps(storage string) moveFileHandlerDeps {
 			return model.ReadWrite
 		},
 		redirect: func(_ *gin.Context, logicalPath string, _ util.JWTMessage) (string, error) {
-			if logicalPath == "user" {
-				return "users/alice", nil
+			if logicalPath == testLogicalUserRoot {
+				return testRealUserRoot, nil
 			}
-			if strings.HasPrefix(logicalPath, "user/") {
-				return "users/alice/" + strings.TrimPrefix(logicalPath, "user/"), nil
+			if strings.HasPrefix(logicalPath, testLogicalUserRoot+"/") {
+				return testRealUserRoot + "/" + strings.TrimPrefix(logicalPath, testLogicalUserRoot+"/"), nil
 			}
 			if logicalPath == "public" {
 				return "public", nil

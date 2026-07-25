@@ -100,7 +100,7 @@ func createDirectoryWithDeps(c *gin.Context, deps createDirectoryHandlerDeps) {
 }
 
 func createStorageDirectory(parent *os.Root, name string, mode os.FileMode) error {
-	if parent == nil || name == "" || name == "." || name == ".." ||
+	if parent == nil || name == "" || name == "." || name == parentPathSegment ||
 		mode.Perm() != mode {
 		return errUploadParentInvalid
 	}

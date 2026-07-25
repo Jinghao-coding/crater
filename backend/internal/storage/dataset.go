@@ -54,6 +54,7 @@ func MoveFile(c *gin.Context) {
 	moveFileWithDeps(c, defaultMoveFileHandlerDeps())
 }
 
+//nolint:gocyclo // Keep each authorization and filesystem failure mapped to its specific public error contract.
 func moveFileWithDeps(c *gin.Context, deps moveFileHandlerDeps) {
 	jwttoken, err := deps.authenticate(c)
 	if err != nil {
@@ -158,6 +159,7 @@ func handleMoveTargetOpenError(c *gin.Context, err error, source bool, message s
 	resputil.HandleError(c, bizerr.Internal.FileSystemError.Wrap(err, "failed to access storage"))
 }
 
+//nolint:gocyclo // The explicit checks preserve no-clobber and source-not-found semantics around one rename.
 func moveStorageEntry(
 	sourceParent *os.Root,
 	sourceName string,
@@ -165,8 +167,8 @@ func moveStorageEntry(
 	destinationName string,
 ) error {
 	if sourceParent == nil || destinationParent == nil ||
-		sourceName == "" || sourceName == "." || sourceName == ".." ||
-		destinationName == "" || destinationName == "." || destinationName == ".." ||
+		sourceName == "" || sourceName == "." || sourceName == parentPathSegment ||
+		destinationName == "" || destinationName == "." || destinationName == parentPathSegment ||
 		filepath.Base(sourceName) != sourceName || filepath.Base(destinationName) != destinationName {
 		return errUploadParentInvalid
 	}

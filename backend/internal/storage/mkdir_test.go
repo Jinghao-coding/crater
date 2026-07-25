@@ -16,6 +16,11 @@ import (
 	"github.com/raids-lab/crater/internal/util"
 )
 
+const (
+	testLogicalUserRoot = "user"
+	testRealUserRoot    = "users/alice"
+)
+
 func TestCreateStorageDirectoryCreatesOneDirectoryWithRequestedMode(t *testing.T) {
 	storage := t.TempDir()
 	root, err := os.OpenRoot(storage)
@@ -43,13 +48,19 @@ func TestCreateStorageDirectoryRaceHasOneWinner(t *testing.T) {
 	storage := t.TempDir()
 	const contenders = 8
 	roots := make([]*os.Root, contenders)
+	t.Cleanup(func() {
+		for _, root := range roots {
+			if root != nil {
+				_ = root.Close()
+			}
+		}
+	})
 	for index := range roots {
 		root, err := os.OpenRoot(storage)
 		if err != nil {
 			t.Fatal(err)
 		}
 		roots[index] = root
-		defer root.Close()
 	}
 
 	var wait sync.WaitGroup
@@ -117,7 +128,7 @@ func TestCreateDirectoryHandlerHTTPContract(t *testing.T) {
 		mutate     func(*testing.T, string, *createDirectoryHandlerDeps)
 	}{
 		{
-			name: "invalid root path", path: "user",
+			name: "invalid root path", path: testLogicalUserRoot,
 			wantStatus: http.StatusBadRequest, wantCode: 40004,
 		},
 		{
@@ -209,10 +220,10 @@ func testCreateDirectoryHandlerDeps(storage string) createDirectoryHandlerDeps {
 			return model.ReadWrite
 		},
 		redirect: func(_ *gin.Context, logicalPath string, _ util.JWTMessage) (string, error) {
-			if logicalPath == "user" {
-				return "users/alice", nil
+			if logicalPath == testLogicalUserRoot {
+				return testRealUserRoot, nil
 			}
-			return "users/alice/" + strings.TrimPrefix(logicalPath, "user/"), nil
+			return testRealUserRoot + "/" + strings.TrimPrefix(logicalPath, testLogicalUserRoot+"/"), nil
 		},
 		openTarget:  openUploadTarget,
 		mkdir:       createStorageDirectory,
@@ -230,7 +241,7 @@ func serveCreateDirectory(
 	router.Handle("MKCOL", "/mkdir/*path", func(c *gin.Context) {
 		createDirectoryWithDeps(c, deps)
 	})
-	request := httptest.NewRequest("MKCOL", "/mkdir/"+logicalPath, nil)
+	request := httptest.NewRequest("MKCOL", "/mkdir/"+logicalPath, http.NoBody)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
 	return recorder
