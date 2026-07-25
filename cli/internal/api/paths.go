@@ -34,6 +34,7 @@ const (
 	SPJobsPrefix        = "/api/v1/spjobs"
 	VCJobsPrefix        = "/api/v1/vcjobs"
 	AdminVCJobsPrefix   = "/api/v1/admin/vcjobs"
+	StoragePrefix       = "/api/ss"
 )
 
 const CompatibilityPath = CompatibilityPrefix + "/compatibility"
@@ -54,4 +55,5 @@ const (
 	VCJobListPath         = VCJobsPrefix
 	VCJobBillingPath      = VCJobsPrefix + "/billing"
 	AdminVCJobBillingPath = AdminVCJobsPrefix + "/billing"
+	FileUploadPath        = StoragePrefix + "/upload"
 )
