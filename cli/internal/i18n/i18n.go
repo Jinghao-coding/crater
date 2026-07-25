@@ -29,6 +29,7 @@ var translations = mergeCatalogs(
 	catalogOrder,
 	catalogErrors,
 	catalogJob,
+	catalogFile,
 )
 
 func mergeCatalogs(catalogs ...map[Language]map[string]string) map[Language]map[string]string {
