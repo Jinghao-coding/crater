@@ -371,3 +371,52 @@ crater job ls --page 2 --page-size 2 --json --no-interactive
   "status": "OK"
 }
 -- zh-CN/21-ls-page-success-json/stderr --
+-- zh-CN/22-logs-missing-name-nojson/argv --
+crater job logs --no-interactive
+-- zh-CN/22-logs-missing-name-nojson/exit --
+2
+-- zh-CN/22-logs-missing-name-nojson/stdout --
+-- zh-CN/22-logs-missing-name-nojson/stderr --
+Error:
+  缺少必要参数：作业名称 (<name>)
+-- zh-CN/23-logs-negative-tail-json/argv --
+crater job logs job-123 --tail -1 --no-interactive --json
+-- zh-CN/23-logs-negative-tail-json/exit --
+2
+-- zh-CN/23-logs-negative-tail-json/stdout --
+-- zh-CN/23-logs-negative-tail-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "tail 不能为负数"
+}
+-- zh-CN/24-logs-pod-all-pods-conflict-json/argv --
+crater job logs job-123 --pod pod-1 --all-pods --no-interactive --json
+-- zh-CN/24-logs-pod-all-pods-conflict-json/exit --
+2
+-- zh-CN/24-logs-pod-all-pods-conflict-json/stdout --
+-- zh-CN/24-logs-pod-all-pods-conflict-json/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "--pod 与 --all-pods 不能同时使用"
+}
+-- zh-CN/25-logs-follow-json-conflict/argv --
+crater job logs job-123 --follow --no-interactive --json
+-- zh-CN/25-logs-follow-json-conflict/exit --
+2
+-- zh-CN/25-logs-follow-json-conflict/stdout --
+-- zh-CN/25-logs-follow-json-conflict/stderr --
+{
+  "category": "usage_error",
+  "code": "ERR_INVALID_FLAG_VALUE",
+  "message": "--follow 不能与 --json 同时使用"
+}
+-- zh-CN/26-logs-follow-previous-conflict-nojson/argv --
+crater job logs job-123 --follow --previous --no-interactive
+-- zh-CN/26-logs-follow-previous-conflict-nojson/exit --
+2
+-- zh-CN/26-logs-follow-previous-conflict-nojson/stdout --
+-- zh-CN/26-logs-follow-previous-conflict-nojson/stderr --
+Error:
+  --follow 不能与 --previous 同时使用

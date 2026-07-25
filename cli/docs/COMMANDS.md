@@ -427,7 +427,7 @@ CLI 发出的平台请求带 `User-Agent: crater-cli/<product-version>` 与 `X-C
 
 ## 6. 作业模块 (job)
 
-本模块覆盖前端作业页面的通用 Volcano 作业能力：列表、详情、Pods、事件、YAML、模板、Jupyter/WebIDE 访问凭据、SSH、快照、告警、删除/停止、基础创建，以及管理员锁定/保留/清理操作。所有访问平台的命令都使用当前 `auth` active context 的 token。管理员能力统一放在 `crater admin job ...` 下，不使用普通命令加 `--admin`。
+本模块覆盖前端作业页面的通用 Volcano 作业能力：列表、详情、Pods、日志、事件、YAML、模板、Jupyter/WebIDE 访问凭据、SSH、快照、告警、删除/停止、基础创建，以及管理员锁定/保留/清理操作。所有访问平台的命令都使用当前 `auth` active context 的 token。管理员能力统一放在 `crater admin job ...` 下，不使用普通命令加 `--admin`。
 
 ### `crater job ls`
 - **描述**: 列出当前账号可见的作业。
@@ -485,6 +485,28 @@ CLI 发出的平台请求带 `User-Agent: crater-cli/<product-version>` 与 `X-C
   - `events`: `events`
   - `yaml`: `yaml`
   - `template`: `template`
+- **状态**: [x] Completed
+
+### `crater job logs <name>`
+- **描述**: 根据平台作业名自动解析 Pod 和容器并输出日志，不需要手工执行 `job pods`、`pod containers`、`pod logs` 三条命令。
+- **位置参数**:
+  - `<name>` (positional, required): 平台作业名。
+- **选项**:
+  - `--pod` (string): 指定一个属于该作业的 Pod。
+  - `--all-pods` (bool): 输出作业全部 Pod 的日志；与 `--pod` 互斥。
+  - `--container` / `-c` (string): 指定容器。
+  - `--all-containers` (bool): 输出所选 Pod 中全部容器的日志；与 `--container` 互斥。
+  - `--tail` (int64, default `0`): 最近日志行数；`0` 表示全部，负数返回 `usage_error`。
+  - `--timestamps` (bool): 包含 Kubernetes 日志时间戳。
+  - `--previous` / `-p` (bool): 获取上一个已终止容器实例的日志。
+  - `--follow` / `-f` (bool): 实时跟随日志，仅支持一个 Pod 和一个容器；不能与 `--previous` 或 `--json` 同时使用。
+  - `--prefix` (bool): 为每行添加 `[pod/container]` 前缀。选择多个日志来源时自动启用前缀。
+- **选择逻辑**:
+  - 单 Pod、单普通容器会自动选择；默认忽略 init container。
+  - 多 Pod 必须使用 `--pod` 或 `--all-pods`。
+  - Pod 中存在多个普通容器时必须使用 `--container` 或 `--all-containers`。
+  - 所有候选项和多来源输出均按 Pod、容器名称稳定排序。
+- **`--json` 的 `data`**：`logs`（数组）；每项固定包含 `namespace`、`pod`、`container`、`content`。
 - **状态**: [x] Completed
 
 ### `crater job token|secret|ssh|snapshot|alert|delete <name>`
@@ -754,13 +776,13 @@ This section records the read-only API surface covered by the CLI after the broa
   - `crater pod containers|events|ingresses|nodeports <pod> --namespace NAMESPACE`
   - `crater pod logs <pod> <container> --namespace NAMESPACE [--tail N] [--timestamps] [--previous]`
 - 为兼容旧脚本，仍接受显式 namespace 的旧位置参数形式：`... <namespace> <pod>` 与 `logs <namespace> <pod> <container>`。同一次调用不能同时提供旧位置参数 namespace 和 `--namespace`，否则返回 `usage_error`。
-- 上述命令覆盖 `/api/v1/namespaces/...` diagnostic GET APIs。平台未向普通用户暴露全局作业命名空间配置，CLI 不硬编码或猜测默认值；`crater job get|pods|events|yaml` 始终使用作业 API 返回的真实 namespace。
-- Log streaming and terminal websocket APIs are intentionally not part of this read CLI.
+- 上述命令覆盖 `/api/v1/namespaces/...` diagnostic GET APIs；`pod logs` 会先解码后端 Base64 载荷再输出原始日志文本。平台未向普通用户暴露全局作业命名空间配置，CLI 不硬编码或猜测默认值；`crater job get|pods|logs|events|yaml` 始终使用作业 API 返回的真实 namespace。
+- Job-level log streaming is available through `crater job logs --follow`; terminal websocket APIs are intentionally not part of this CLI.
 - AIJob/SPJob reads are intentionally not exposed in this PR because their backend identifier contracts differ from Volcano job names and need a dedicated CLI design.
 
 ### Interfaces Not Exposed As General Read CLI
 - Sensitive credential reads (`/token`, `/secret`, Harbor credential APIs) are not exposed in the broad read surface.
-- WebSocket, terminal, and log streaming endpoints are not exposed because they are interactive/streaming rather than stable one-shot reads.
+- WebSocket and terminal endpoints are not exposed because they are interactive rather than stable one-shot reads.
 - The untracked local `inference-services` API is not documented here until that backend/frontend feature lands in the branch base.
 - Public health, Swagger, Prometheus metrics, and low-level WebDAV file listing are left to their domain-specific tools rather than this first read CLI pass.
 

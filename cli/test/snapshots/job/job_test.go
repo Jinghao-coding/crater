@@ -56,6 +56,16 @@ func jobSuccessCases() []snaptest.Case {
 	}
 }
 
+func jobLogCases() []snaptest.Case {
+	return []snaptest.Case{
+		{ID: "22-logs-missing-name-nojson", Args: []string{"job", "logs", "--no-interactive"}},
+		{ID: "23-logs-negative-tail-json", Args: []string{"job", "logs", "job-123", "--tail", "-1", "--no-interactive", "--json"}},
+		{ID: "24-logs-pod-all-pods-conflict-json", Args: []string{"job", "logs", "job-123", "--pod", "pod-1", "--all-pods", "--no-interactive", "--json"}},
+		{ID: "25-logs-follow-json-conflict", Args: []string{"job", "logs", "job-123", "--follow", "--no-interactive", "--json"}},
+		{ID: "26-logs-follow-previous-conflict-nojson", Args: []string{"job", "logs", "job-123", "--follow", "--previous", "--no-interactive"}},
+	}
+}
+
 func newJobListSnapshotServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -131,6 +141,11 @@ func runJobSnapshots(t *testing.T, lang string) {
 	successResults := runJobCases(t, bin, successEnv, successCases)
 	cases = append(cases, successCases...)
 	results = append(results, successResults...)
+
+	logCases := jobLogCases()
+	logResults := runJobCases(t, bin, timeoutEnv, logCases)
+	cases = append(cases, logCases...)
+	results = append(results, logResults...)
 
 	update := os.Getenv("UPDATE_SNAPSHOTS") == "1" || os.Getenv("UPDATE_SNAPSHOTS") == "true"
 	if err := snaptest.MatchOrUpdateGolden(path, lang, cases, results, update); err != nil {
