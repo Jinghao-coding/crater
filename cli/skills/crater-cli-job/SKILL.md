@@ -42,7 +42,14 @@ For Jupyter/WebIDE access commands, the returned token or password is sensitive.
 List running GPU jobs for a user:
 
 ```bash
-crater job ls --user alice --status Running --page-size 15 --json --no-interactive
+crater job ls \
+  --user alice \
+  --search experiment \
+  --status Running,Pending \
+  --type pytorch,tensorflow \
+  --schedule normal \
+  --all-pages \
+  --json --no-interactive
 ```
 
 Inspect a job:

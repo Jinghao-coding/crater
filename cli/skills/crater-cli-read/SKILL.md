@@ -42,7 +42,7 @@ crater node pods gpu-node-01 --namespace team-workloads --type batch.volcano.sh/
 crater node pods gpu-node-01 --all-namespaces --all-pages --json
 crater node gpu gpu-node-01 --json
 crater job ls --search experiment --page-size 15 --json
-crater job ls --all --days 7 --status Running --json
+crater job ls --all --days 7 --search experiment --status Running,Pending --type pytorch --schedule normal --all-pages --json
 crater job ls --interactive --json
 crater job get my-job-name --json
 crater job pods my-job-name --status Running --page-size 15 --json

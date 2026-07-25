@@ -437,8 +437,9 @@ CLI 发出的平台请求带 `User-Agent: crater-cli/<product-version>` 与 `X-C
   - `--user` (string): 调用 `/api/v1/vcjobs/user/{username}`，列出指定用户且位于 `--days` 回看窗口内的作业。
   - `--days` (int): 覆盖当前路由的回溯天数；`-1` 表示不按时间过滤。小于 `-1` 的值返回 `usage_error`。不指定时，默认自视图不限制时间，`--all`/管理员视图回看 7 天，`--user` 回看 30 天。
   - `--search` (string): 服务端按作业名称、所有者或账户搜索，最多 128 个 Unicode 字符。
-  - `--status` (string): 服务端过滤作业状态。
-  - `--type` (string): 服务端过滤作业类型：`jupyter | webide | custom | pytorch | tensorflow | kuberay | deepspeed | openmpi`。
+  - `--status` (string slice): 服务端过滤作业状态，可重复或逗号分隔，最多 20 项。
+  - `--type` (string slice): 服务端过滤作业类型，可重复或逗号分隔，最多 20 项；类型为 `jupyter | webide | custom | pytorch | tensorflow | kuberay | deepspeed | openmpi`。
+  - `--schedule` (string slice): 服务端过滤调度类型，可重复或逗号分隔，值为 `normal | backfill`，最多 20 项。
   - `--node` (string): 服务端过滤运行在指定节点上的作业。
   - `--owner` (string): 本地按用户名或作业响应中的 owner 精确筛选。
   - `--from` / `--to` (string): 本地按 `createdAt` 时间范围筛选，支持 RFC3339 或 `YYYY-MM-DD`。
