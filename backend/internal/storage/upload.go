@@ -27,6 +27,7 @@ const (
 	uploadStageAttempts                = 16
 	uploadStageRandomBytes             = 16
 	uploadStagePayload                 = "payload"
+	parentPathSegment                  = ".."
 )
 
 var (
@@ -199,7 +200,7 @@ func normalizeUploadLogicalPath(raw string) (string, error) {
 	rawSegments := strings.Split(trimmed, "/")
 	segments := make([]string, 0, len(rawSegments))
 	for _, segment := range rawSegments {
-		if segment == ".." {
+		if segment == parentPathSegment {
 			return "", errors.New("parent traversal is not allowed")
 		}
 		if segment == "" || segment == "." {
@@ -315,7 +316,7 @@ func canonicalStorageSegments(raw string) (string, error) {
 			legacyEmptySeen = true
 			continue
 		}
-		if segment == "." || segment == ".." {
+		if segment == "." || segment == parentPathSegment {
 			return "", errUploadParentInvalid
 		}
 		canonical = append(canonical, segment)
@@ -324,7 +325,8 @@ func canonicalStorageSegments(raw string) (string, error) {
 }
 
 func pathEscapesRoot(path string) bool {
-	return path == ".." || strings.HasPrefix(path, ".."+string(filepath.Separator))
+	return path == parentPathSegment ||
+		strings.HasPrefix(path, parentPathSegment+string(filepath.Separator))
 }
 
 func stageAndPublishFile(
@@ -353,7 +355,7 @@ func stageAndPublishFile(
 
 func validateUploadTarget(parent *os.Root, targetName string, overwrite bool) error {
 	if parent == nil || targetName == "" || targetName == "." ||
-		targetName == ".." || filepath.Base(targetName) != targetName {
+		targetName == parentPathSegment || filepath.Base(targetName) != targetName {
 		return errUploadParentInvalid
 	}
 	targetInfo, err := parent.Lstat(targetName)
