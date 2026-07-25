@@ -772,3 +772,33 @@ This section records the read-only API surface covered by the CLI after the broa
 - `crater admin cronjobs`: `/api/v1/admin/operations/cronjob`.
 - `crater admin whitelist`: `/api/v1/admin/operations/whitelist`.
 - These commands surface existing admin GET APIs only. They do not perform update/delete/reconcile actions.
+
+---
+
+## 8. 远端文件模块 (file)
+
+本模块面向普通用户访问 storage service 暴露的逻辑文件空间。远端路径不是本机路径，只允许以 `user`、`public` 或 `account` 为首段；CLI 会规范化安全的 `.`、重复分隔符和首尾分隔符，逐段进行 URL 编码，保留合法的空格与非 ASCII 文件名，并在请求前拒绝任何 `..` 段、反斜杠和控制字符。
+
+### `crater file download <remote-file> [local-path]`
+
+- **描述**：把一个远端普通文件流式下载到本机。
+- **位置参数**：
+  - `<remote-file>`（必填）：逻辑远端文件路径，必须指向 `user`、`public` 或 `account` 下的具体条目，不能只给逻辑根。
+  - `[local-path]`（可选）：目标本地文件路径；不是目录。省略时使用远端路径的最后一段作为当前目录下的文件名。
+- **选项**：
+  - `--overwrite`（bool）：允许原子替换已存在的本地文件；默认拒绝覆盖。
+- **处理逻辑**：
+  - 调用 `GET /api/ss/download/*path`，响应内容直接流式写入目标同目录的临时文件，不把完整文件读入内存。
+  - 完整传输后依次同步、关闭临时文件。启用 `--overwrite` 时通过同目录重命名原子替换；默认模式通过原子 no-clobber 发布保证并发出现的目标也不会被覆盖。
+  - 失败时清理临时文件；即使使用 `--overwrite`，也不会在下载完成前删除或截断原文件。
+  - 未使用 `--overwrite` 时，请求前会检查目标是否已存在，最终发布本身也采用原子 no-clobber 语义，避免检查与发布之间的竞态覆盖。
+  - 不支持目录递归下载、断点续传、并行分片或进度条。
+- **输出格式**：
+  - 默认模式：成功后展示远端路径、本地路径和写入字节数。
+  - `--json`：仅在下载成功后向 stdout 输出结果元数据；文件内容永远不会写入 stdout。
+- **`--json` 的 `data`**：
+  - `remote_path`（字符串）：规范化后的逻辑远端路径。
+  - `local_path`（字符串）：实际目标本地路径。
+  - `bytes`（整数）：写入字节数。
+  - `overwrite`（布尔）：本次是否启用了显式覆盖选项。
+- **状态**：[x] Completed
