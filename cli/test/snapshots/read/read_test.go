@@ -58,13 +58,18 @@ func runReadSnapshots(t *testing.T, lang string) {
 		{ID: "32-admin-order-ls-404-json", Args: []string{"admin", "order", "ls", "--json", "--no-interactive"}},
 		{ID: "33-user-get-missing-json", Args: []string{"user", "get", "--json", "--no-interactive"}},
 		{ID: "34-admin-user-ls-404-json", Args: []string{"admin", "user", "ls", "--json", "--no-interactive"}},
-		{ID: "35-pod-logs-missing-json", Args: []string{"pod", "logs", "ns", "pod", "--json", "--no-interactive"}},
+		{ID: "35-pod-logs-missing-json", Args: []string{"pod", "logs", "pod", "--json", "--no-interactive"}},
 		{ID: "36-billing-jobs-404-json", Args: []string{"billing", "jobs", "--all", "--json", "--no-interactive"}},
 		{ID: "37-admin-billing-jobs-404-json", Args: []string{"admin", "billing", "jobs", "--json", "--no-interactive"}},
 		{ID: "38-aijob-removed-json", Args: []string{"aijob", "ls", "--json", "--no-interactive"}},
 		{ID: "39-spjob-removed-json", Args: []string{"spjob", "yaml", "--json", "--no-interactive"}},
 		{ID: "40-admin-operation-logs-404-json", Args: []string{"admin", "operation-logs", "--json", "--no-interactive"}},
 		{ID: "41-admin-system-config-llm-404-json", Args: []string{"admin", "system-config", "llm", "--json", "--no-interactive"}},
+		{ID: "42-pod-logs-default-namespace-timeout-json", Args: []string{"pod", "logs", "worker-0", "main", "--json", "--no-interactive"}},
+		{ID: "43-node-pods-multiple-list-issues-json", Args: []string{"node", "pods", "gpu-01", "--namespace", "kube-system", "--all-namespaces", "--page", "0", "--status", "bad", "--json", "--no-interactive"}},
+		{ID: "44-admin-user-multiple-list-issues-json", Args: []string{"admin", "user", "ls", "--page", "0", "--page-size", "201", "--role", "Owner", "--status", "Disabled", "--json", "--no-interactive"}},
+		{ID: "45-billing-multiple-list-issues-json", Args: []string{"billing", "jobs", "--page", "0", "--page-size", "201", "--days", "-2", "--json", "--no-interactive"}},
+		{ID: "46-admin-model-download-multiple-list-issues-json", Args: []string{"admin", "model-download", "ls", "--page", "0", "--page-size", "101", "--category", "bad", "--status", "Unknown", "--json", "--no-interactive"}},
 	}
 	results := make([]*snaptest.Result, len(cases))
 	for i := range cases {
@@ -74,6 +79,8 @@ func runReadSnapshots(t *testing.T, lang string) {
 			"23-admin-account-ls-404-json", "27-admin-dataset-ls-404-json", "28-template-ls-404-json", "30-context-resources-404-json", "32-admin-order-ls-404-json",
 			"34-admin-user-ls-404-json", "36-billing-jobs-404-json", "37-admin-billing-jobs-404-json", "40-admin-operation-logs-404-json", "41-admin-system-config-llm-404-json":
 			env = append(baseEnv, "CRATER_TEST_SANDBOX_HTTP=error404")
+		case "42-pod-logs-default-namespace-timeout-json":
+			env = append(baseEnv, "CRATER_TEST_SANDBOX_HTTP=timeout")
 		}
 		r, err := snaptest.Run(bin, env, cases[i].Args)
 		if err != nil {

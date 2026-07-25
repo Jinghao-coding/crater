@@ -26,6 +26,15 @@
 
 所有用户可见命令都必须显式定义 Cobra 参数校验。无位置参数的命令必须拒绝多余位置参数，不能静默忽略；有位置参数的命令必须按 [COMMANDS.md](./COMMANDS.md) 校验数量和含义。解析阶段失败仍需遵守全局 `--json` 与错误输出规则。
 
+### 列表分页
+
+高基数列表按 [COMMANDS.md](./COMMANDS.md) 的指令级约定采用公共 `--page`、`--page-size`、`--all-pages` 契约；不得因此机械截断未采用这些 flags 的低基数列表。
+
+- `--page` 默认 `1` 且必须大于等于 `1`；`--page-size` 默认 `15`。公共最大值为 `200`，若后端端点有更小上限（当前 `download ls` 及兼容的 `model-download ls`/管理员列表为 `100`），命令必须使用该上限并写入 COMMANDS。
+- `--all-pages` 从第一页开始返回完整筛选结果，省略 JSON `data.pagination`。默认分页 JSON 在 `data` 中同时返回资源数组和 `pagination: {page, page_size, total}`；人类可读表格应显示公共页摘要。
+- 后端支持分页与筛选时优先透传，由 `internal/api` 暴露 typed page DTO；后端只返回完整数组时，在 `cmd` 层先完成筛选和稳定排序，再本地分页。若一个命令同时有服务端分页与本地筛选，必须先顺序读取全部候选服务端页，再本地筛选和重新分页，确保 `total` 与页面边界针对最终筛选结果。
+- 分页字段错误必须与状态、类型、namespace 等同一次调用中的其它本地用法错误一起收集，经 `errUsageFromIssues` 一次返回；不得先因分页参数 fail-fast 而丢失其它可同时发现的问题。
+
 ### 文档驱动
 
 一方面，整个开发过程中必须严格遵守本规范文档；另一方面，使用[指令文档](./COMMANDS.md)驱动新指令的开发和已有指令的修改。
@@ -253,6 +262,7 @@ Crater 后端 API 错误信封为 `code`、`data`、`msg`。CLI 不应依赖后�
 实现上：
 
 - 使用 `output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(payload))`。顶层 `status` 使用常量 `output.JSONSuccessStatus`；业务载荷只进 `data` 对象。成功体不使用错误体的 `category` / `code`；`data` 不得含 `http_status`。
+- 采用公共分页契约的列表，其 `data` 同时包含资源数组和 `pagination: {page, page_size, total}`；`--all-pages` 返回完整过滤结果并省略 `pagination`。具体资源键、上限及筛选语义以 COMMANDS 为准。
 - `data` 允许哪些键、是否可为 `{}`、顶层是否带 `message`、敏感字段能否出现等，**只以 COMMANDS 为准**，本规范不列举。
 
 ### 成功：非 `--json`

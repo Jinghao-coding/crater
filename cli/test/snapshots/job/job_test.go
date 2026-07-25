@@ -39,6 +39,10 @@ func jobCases() []snaptest.Case {
 		{ID: "13-delete-confirm-required-json", Args: []string{"job", "delete", "job-123", "--no-interactive", "--json"}},
 		{ID: "14-admin-clean-long-running-thresholds-json", Args: []string{"admin", "job", "clean", "long-running", "--no-interactive", "--json"}},
 		{ID: "15-admin-clean-confirm-required-json", Args: []string{"admin", "job", "clean", "low-gpu", "--time-range", "90", "--wait-time", "30", "--no-interactive", "--json"}},
+		{ID: "16-ls-multiple-list-issues-json", Args: []string{"job", "ls", "--page", "0", "--page-size", "201", "--status", "bad", "--json", "--no-interactive"}},
+		{ID: "17-pods-multiple-list-issues-json", Args: []string{"job", "pods", "job-123", "--page", "0", "--status", "bad", "--json", "--no-interactive"}},
+		{ID: "18-ls-search-page-timeout-json", Args: []string{"job", "ls", "--search", "trainer", "--page", "2", "--page-size", "15", "--sort=-createdAt", "--json", "--no-interactive"}},
+		{ID: "19-ls-search-sort-usage-json", Args: []string{"job", "ls", "--search", "这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词这是一个超过一百二十八个字符限制的搜索词", "--sort", "name,-name,bad,createdAt", "--json", "--no-interactive"}},
 	}
 }
 
