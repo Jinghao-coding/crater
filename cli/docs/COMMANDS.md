@@ -813,6 +813,26 @@ This section records the read-only API surface covered by the CLI after the broa
 - **`--json` 的 `data`**：`source_path`（字符串）、`destination_path`（字符串）。
 - **状态**：[x] Completed
 
+### `crater file rm <remote-path>`
+
+- **描述**：删除普通用户逻辑空间中的一个精确远端路径。
+- **位置参数**：
+  - `<remote-path>`（必填）：`user`、`public` 或 `account` 下的完整目标路径；不能是逻辑根，也不能包含原始 `.`、`..`、反斜杠、控制字符或平台保留根。
+- **选项**：
+  - `--recursive`（bool）：允许删除目录及其内容；删除目录时必须显式提供。
+  - `--yes, -y`（bool）：跳过交互确认。`--json` 或 `--no-interactive` 模式下必须显式提供。
+- **处理逻辑**：
+  - 调用专用安全接口 `DELETE /api/ss/files/*path?recursive=<bool>`，不会回退到旧的无条件递归删除接口。
+  - 交互模式在发送请求前展示规范化后的精确目标，默认选择 No；取消时不创建 API client，也不发送请求。
+  - 普通文件和最终 symlink 只删除该条目且不跟随链接；目录只有同时提供 `--recursive --yes` 才允许递归删除。
+  - 权限、授权根和条目类型由 storage service 再次校验；删除过程中类型发生变化时安全失败，不会自动升级为递归删除。
+  - 仅支持单目标，不支持 glob、批量删除、Trash、恢复或管理员跨用户删除。
+- **输出格式**：
+  - 默认模式：展示已删除的规范化远端路径。
+  - `--json`：stdout 仅输出成功信封；失败时 stdout 为空。
+- **`--json` 的 `data`**：`remote_path`（字符串）、`recursive`（布尔）。
+- **状态**：[x] Completed
+
 ### `crater file upload <local-file> <remote-path>`
 
 - **描述**：把一个本地普通文件流式上传到远端逻辑路径。

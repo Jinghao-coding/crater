@@ -330,11 +330,14 @@ func fileLocalPathCompleter(ctx completion.Context) ([]completion.Candidate, err
 
 func init() {
 	fileUploadCmd.Flags().Bool("overwrite", false, "Replace an existing remote file")
-	fileCmd.AddCommand(fileMkdirCmd, fileMoveCmd, fileUploadCmd)
+	fileRemoveCmd.Flags().Bool("recursive", false, "Remove a directory and all of its contents")
+	fileRemoveCmd.Flags().BoolP("yes", "y", false, "Remove without confirmation")
+	fileCmd.AddCommand(fileMkdirCmd, fileMoveCmd, fileRemoveCmd, fileUploadCmd)
 	rootCmd.AddCommand(fileCmd)
 	completion.RegisterPositional([]string{"file", "mkdir"}, 0, fileRemoteRootCompleter)
 	completion.RegisterPositional([]string{"file", "mv"}, 0, fileRemoteRootCompleter)
 	completion.RegisterPositional([]string{"file", "mv"}, 1, fileRemoteRootCompleter)
+	completion.RegisterPositional([]string{"file", "rm"}, 0, fileRemoteRootCompleter)
 	completion.RegisterPositional([]string{"file", "upload"}, 0, fileLocalPathCompleter)
 	completion.RegisterPositional([]string{"file", "upload"}, 1, fileRemoteRootCompleter)
 }
