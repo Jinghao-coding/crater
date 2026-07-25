@@ -10,21 +10,22 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/spf13/cobra"
+
 	"github.com/raids-lab/crater/cli/internal/api"
 	"github.com/raids-lab/crater/cli/internal/clierror"
 	"github.com/raids-lab/crater/cli/internal/completion"
 	"github.com/raids-lab/crater/cli/internal/i18n"
 	"github.com/raids-lab/crater/cli/internal/output"
 	"github.com/raids-lab/crater/cli/pkg/errorcodes"
-	"github.com/spf13/cobra"
 )
 
 var fileRemoteRoots = []string{"user", "public", "account"}
 
 var fileCmd = &cobra.Command{
 	Use:   "file",
-	Short: "Upload remote files",
-	Long:  "Upload files to user, public, and account storage spaces.",
+	Short: "Manage remote files",
+	Long:  "Manage files and directories in user, public, and account storage spaces.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) > 0 {
 			return errUnknownSubcommand(cmd, args[0])
@@ -329,8 +330,11 @@ func fileLocalPathCompleter(ctx completion.Context) ([]completion.Candidate, err
 
 func init() {
 	fileUploadCmd.Flags().Bool("overwrite", false, "Replace an existing remote file")
-	fileCmd.AddCommand(fileUploadCmd)
+	fileCmd.AddCommand(fileMkdirCmd, fileMoveCmd, fileUploadCmd)
 	rootCmd.AddCommand(fileCmd)
+	completion.RegisterPositional([]string{"file", "mkdir"}, 0, fileRemoteRootCompleter)
+	completion.RegisterPositional([]string{"file", "mv"}, 0, fileRemoteRootCompleter)
+	completion.RegisterPositional([]string{"file", "mv"}, 1, fileRemoteRootCompleter)
 	completion.RegisterPositional([]string{"file", "upload"}, 0, fileLocalPathCompleter)
 	completion.RegisterPositional([]string{"file", "upload"}, 1, fileRemoteRootCompleter)
 }

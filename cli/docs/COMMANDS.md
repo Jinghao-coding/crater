@@ -779,6 +779,40 @@ This section records the read-only API surface covered by the CLI after the broa
 
 本模块面向普通用户访问 storage service 暴露的逻辑文件空间。远端路径不是本机路径，只允许以 `user`、`public` 或 `account` 为首段；CLI 会规范化安全的 `.`、重复分隔符和首尾分隔符，逐段进行 URL 编码，保留合法的空格与非 ASCII 文件名，并在请求前拒绝任何 `..` 段、反斜杠和控制字符。
 
+### `crater file mkdir <remote-path>`
+
+- **描述**：在远端逻辑文件空间创建一个目录。
+- **位置参数**：
+  - `<remote-path>`（必填）：`user`、`public` 或 `account` 下的完整目标目录路径，不能只给逻辑根。
+- **处理逻辑**：
+  - 调用 `MKCOL /api/ss/*path`。
+  - 只创建目标目录；父目录必须预先存在，不会递归补齐。
+  - 已存在的文件或目录按冲突处理，不会被修改。
+  - 权限和目标路径由 storage service 再次校验；CLI 只有在收到精确的 HTTP 201 后才报告成功。
+- **输出格式**：
+  - 默认模式：展示规范化后的已创建目录路径。
+  - `--json`：stdout 仅输出成功信封。
+- **`--json` 的 `data`**：`remote_path`（字符串）。
+- **状态**：[x] Completed
+
+### `crater file mv <source-path> <destination-path>`
+
+- **描述**：把一个远端文件或目录移动到另一个精确目标路径。
+- **位置参数**：
+  - `<source-path>`（必填）：现有文件或目录的完整逻辑路径。
+  - `<destination-path>`（必填）：移动后的完整目标路径，不是仅包含目标父目录的路径。
+- **处理逻辑**：
+  - 调用 `POST /api/ss/move/*source-path`，请求体中的 `dst` 为完整目标路径。
+  - 源和目标都必须位于 `user`、`public` 或 `account` 下，且必须具备写权限。
+  - 拒绝同路径移动，也拒绝把目录移动到自身的后代路径。
+  - 目标父目录必须预先存在，不会自动创建。
+  - 不提供覆盖选项；目标已存在时始终返回冲突。服务端仅在文件系统支持原生原子 no-clobber rename 时执行移动；不支持该能力时安全失败，不会退化为可能覆盖并发目标的普通重命名。
+- **输出格式**：
+  - 默认模式：展示源路径和目标路径。
+  - `--json`：stdout 仅输出成功信封。
+- **`--json` 的 `data`**：`source_path`（字符串）、`destination_path`（字符串）。
+- **状态**：[x] Completed
+
 ### `crater file upload <local-file> <remote-path>`
 
 - **描述**：把一个本地普通文件流式上传到远端逻辑路径。

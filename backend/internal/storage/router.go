@@ -5,7 +5,6 @@ import "github.com/gin-gonic/gin"
 func RegisterRoutes(r *gin.Engine) {
 	methods := []string{
 		"PUT",
-		"MKCOL",
 		"PROPFIND",
 		"PROPPATCH",
 	}
@@ -14,6 +13,8 @@ func RegisterRoutes(r *gin.Engine) {
 		r.Handle(m, "/api/ss", WebDav)
 		r.Handle(m, "/api/ss/*path", WebDav)
 	}
+	r.Handle("MKCOL", "/api/ss", CreateDirectory)
+	r.Handle("MKCOL", "/api/ss/*path", CreateDirectory)
 
 	webdavGroup := r.Group("api/ss", WebDAVMiddleware())
 	RegisterDataset(webdavGroup)

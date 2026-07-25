@@ -146,6 +146,19 @@ func (reader *uploadSourceReader) Read(data []byte) (int, error) {
 }
 
 func rawFileRequestError(resp *req.Response) error {
+	if resp == nil || resp.Response == nil {
+		return &NetworkError{Cause: errors.New("storage service returned no HTTP response")}
+	}
+	if resp.Body == nil {
+		message := http.StatusText(resp.GetStatusCode())
+		if message == "" {
+			message = "storage service returned an empty error response"
+		}
+		return &RequestError{
+			HTTPStatus: resp.GetStatusCode(),
+			Msg:        message,
+		}
+	}
 	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxFileErrorBody+1))
 	if readErr != nil {
 		message := http.StatusText(resp.GetStatusCode())

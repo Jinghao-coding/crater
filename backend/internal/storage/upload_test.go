@@ -512,6 +512,31 @@ func TestNormalizeUploadLogicalPath(t *testing.T) {
 	}
 }
 
+func TestNormalizeWebDAVMutationLogicalPathKeepsAdminCompatibility(t *testing.T) {
+	for _, valid := range []string{
+		"user/new-directory",
+		"public/new-directory",
+		"account/new-directory",
+		"admin-user/alice/new-directory",
+		"admin-public/new-directory",
+		"admin-account/team/new-directory",
+	} {
+		if _, err := normalizeWebDAVMutationLogicalPath(valid); err != nil {
+			t.Errorf("normalizeWebDAVMutationLogicalPath(%q): %v", valid, err)
+		}
+	}
+	for _, invalid := range []string{
+		"user",
+		"admin-user",
+		"crater-model/new-directory",
+		"user/../public/new-directory",
+	} {
+		if _, err := normalizeWebDAVMutationLogicalPath(invalid); err == nil {
+			t.Errorf("normalizeWebDAVMutationLogicalPath(%q) accepted invalid path", invalid)
+		}
+	}
+}
+
 func TestParseUploadOverwrite(t *testing.T) {
 	for _, valid := range []string{"", "false", "true"} {
 		if _, err := parseUploadOverwrite(valid); err != nil {
