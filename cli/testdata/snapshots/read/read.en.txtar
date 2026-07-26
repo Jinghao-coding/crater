@@ -82,7 +82,7 @@ crater node gpu --json --no-interactive
   "message": "node name is required (\u003cname\u003e)"
 }
 -- en/08-node-pods-404-json/argv --
-crater node pods missing-node --json --no-interactive
+crater node pods missing-node --namespace team-workloads --json --no-interactive
 -- en/08-node-pods-404-json/exit --
 4
 -- en/08-node-pods-404-json/stdout --
@@ -525,19 +525,16 @@ crater admin system-config llm --json --no-interactive
     "msg": "simulated"
   }
 }
--- en/42-pod-logs-default-namespace-timeout-json/argv --
+-- en/42-pod-logs-missing-namespace-json/argv --
 crater pod logs worker-0 main --json --no-interactive
--- en/42-pod-logs-default-namespace-timeout-json/exit --
-4
--- en/42-pod-logs-default-namespace-timeout-json/stdout --
--- en/42-pod-logs-default-namespace-timeout-json/stderr --
+-- en/42-pod-logs-missing-namespace-json/exit --
+2
+-- en/42-pod-logs-missing-namespace-json/stdout --
+-- en/42-pod-logs-missing-namespace-json/stderr --
 {
-  "category": "api_error",
-  "code": "ERR_NETWORK_FAILURE",
-  "message": "could not reach server: Get \"https://example.invalid/api/v1/namespaces/crater-workspace/pods/worker-0/containers/main/log?previous=false\u0026timestamps=false\": context deadline exceeded",
-  "context": {
-    "msg": "network error: Get \"https://example.invalid/api/v1/namespaces/crater-workspace/pods/worker-0/containers/main/log?previous=false\u0026timestamps=false\": context deadline exceeded"
-  }
+  "category": "usage_error",
+  "code": "ERR_MISSING_REQUIRED_FLAG",
+  "message": "namespace is required (--namespace)"
 }
 -- en/43-node-pods-multiple-list-issues-json/argv --
 crater node pods gpu-01 --namespace kube-system --all-namespaces --page 0 --status bad --json --no-interactive

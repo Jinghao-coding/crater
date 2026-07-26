@@ -31,7 +31,7 @@ Use `crater job ls --search <text> --json --no-interactive` before destructive a
 
 Job list pagination is server-side. When `--owner`, `--from`, or `--to` is used, the CLI fetches all candidate server pages, applies those local filters, and re-paginates the filtered result. `--all-pages` starts at the first server page and omits `data.pagination`.
 
-`job get|pods|events|yaml` locate resources through the job API and preserve the backend's real namespace. Do not force `crater-workspace` onto those responses; that default applies to direct `crater pod ...` diagnostics and `crater node pods`, not job-specific endpoints.
+`job get|pods|events|yaml` locate resources through the job API and preserve the backend's real namespace. Direct `crater pod ...` diagnostics require an explicit namespace; `crater node pods` requires either `--namespace` or `--all-namespaces`. Do not invent a fixed namespace for either path.
 
 For create commands, validate resource values before calling the platform. CPU, memory, and GPU counts must not be negative; task replicas must be positive. Workspace mounts use `subPath:mountPath`; dataset mounts use `datasetID:mountPath`; forwards use `name:port`.
 

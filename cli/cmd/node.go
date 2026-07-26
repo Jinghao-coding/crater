@@ -28,8 +28,6 @@ var nodeCmd = &cobra.Command{
 	},
 }
 
-const defaultWorkloadNamespace = "crater-workspace"
-
 var (
 	podStatuses = []string{"Pending", "Running", "Succeeded", "Failed", "Unknown"}
 	podTypes    = []string{
@@ -242,7 +240,15 @@ func readNodePodListOptions(cmd *cobra.Command) (nodePodListOptions, error) {
 		))
 	}
 	if !allNamespaces && namespace == "" {
-		issues = append(issues, invalidIssue("namespace", i18n.T("err_namespace_empty")))
+		if cmd.Flags().Changed("namespace") {
+			issues = append(issues, invalidIssue("namespace", i18n.T("err_namespace_empty")))
+		} else {
+			issues = append(issues, usageIssue{
+				Code:    errorcodes.ErrMissingRequiredFlag,
+				Message: i18n.T("err_namespace_or_all_required"),
+				Field:   "namespace",
+			})
+		}
 	}
 	if status != "" && !slices.Contains(podStatuses, status) {
 		issues = append(issues, invalidIssue("status", i18n.T("err_invalid_pod_status", status)))
@@ -460,7 +466,7 @@ func init() {
 	nodeLsCmd.Flags().Bool("gpu-available", false, "Only show nodes with available matching GPU")
 	completion.RegisterFlagValue([]string{"node", "ls"}, "status", staticValueCompleter([]string{"Ready", "NotReady", "Unschedulable", "Occupied"}, nil))
 	completion.RegisterFlagValue([]string{"node", "ls"}, "arch", staticValueCompleter([]string{"amd64", "arm64"}, nil))
-	nodePodsCmd.Flags().String("namespace", defaultWorkloadNamespace, i18n.T("flag_namespace"))
+	nodePodsCmd.Flags().String("namespace", "", i18n.T("flag_node_pod_namespace"))
 	nodePodsCmd.Flags().Bool("all-namespaces", false, i18n.T("flag_all-namespaces"))
 	nodePodsCmd.Flags().String("status", "", i18n.T("flag_status"))
 	nodePodsCmd.Flags().String("type", "", i18n.T("flag_type"))

@@ -1,6 +1,9 @@
 package job_test
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -46,30 +49,99 @@ func jobCases() []snaptest.Case {
 	}
 }
 
-func TestJobSnapshotsEN(t *testing.T) {
-	path := snaptest.GoldenFileT(t, "job", goldenStemJob, "en")
+func jobSuccessCases() []snaptest.Case {
+	return []snaptest.Case{
+		{ID: "20-ls-page-success-nojson", Args: []string{"job", "ls", "--page", "2", "--page-size", "2", "--no-interactive"}},
+		{ID: "21-ls-page-success-json", Args: []string{"job", "ls", "--page", "2", "--page-size", "2", "--json", "--no-interactive"}},
+	}
+}
+
+func newJobListSnapshotServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/vcjobs" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.String())
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Query().Get("page") != "2" || r.URL.Query().Get("page_size") != "2" {
+			t.Errorf("unexpected pagination query: %s", r.URL.RawQuery)
+			http.Error(w, "unexpected pagination", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{
+  "code": 0,
+  "data": {
+    "items": [
+      {
+        "name": "training-demo",
+        "jobName": "vcjob-alice-training-demo",
+        "owner": "alice",
+        "userInfo": {"username": "alice", "nickname": "Alice"},
+        "jobType": "pytorch",
+        "scheduleType": 0,
+        "queue": "default",
+        "status": "Running",
+        "createdAt": "2026-07-25T08:00:00Z",
+        "startedAt": "2026-07-25T08:01:00Z",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "nodes": ["gpu-02"],
+        "resources": {
+          "cpu": "4",
+          "memory": "16Gi",
+          "nvidia.com/a100": "2"
+        },
+        "locked": false,
+        "permanentLocked": false,
+        "lockedTimestamp": "0001-01-01T00:00:00Z",
+        "billedPointsTotal": 12.5
+      }
+    ],
+    "total": 3,
+    "page": 2,
+    "page_size": 2
+  },
+  "msg": ""
+}`)
+	}))
+}
+
+func runJobSnapshots(t *testing.T, lang string) {
+	t.Helper()
+	path := snaptest.GoldenFileT(t, "job", goldenStemJob, lang)
 	home := t.TempDir()
-	baseEnv := snaptest.EnvMinimal(home, "en")
-	baseEnv = append(baseEnv, "CRATER_TEST_SANDBOX_HTTP=timeout")
 	bin := snaptest.CraterExecutable(t)
+
 	cases := jobCases()
-	results := runJobCases(t, bin, baseEnv, cases)
+	timeoutEnv := append(
+		snaptest.EnvMinimal(home, lang),
+		"CRATER_TEST_SANDBOX_HTTP=timeout",
+	)
+	results := runJobCases(t, bin, timeoutEnv, cases)
+
+	server := newJobListSnapshotServer(t)
+	defer server.Close()
+	successCases := jobSuccessCases()
+	successEnv := append(
+		snaptest.EnvMinimal(home, lang),
+		"CRATER_TEST_SANDBOX_HTTP=passthrough",
+		"CRATER_TEST_SANDBOX_PLATFORM_URL="+server.URL,
+	)
+	successResults := runJobCases(t, bin, successEnv, successCases)
+	cases = append(cases, successCases...)
+	results = append(results, successResults...)
+
 	update := os.Getenv("UPDATE_SNAPSHOTS") == "1" || os.Getenv("UPDATE_SNAPSHOTS") == "true"
-	if err := snaptest.MatchOrUpdateGolden(path, "en", cases, results, update); err != nil {
+	if err := snaptest.MatchOrUpdateGolden(path, lang, cases, results, update); err != nil {
 		t.Fatal(err)
 	}
 }
 
+func TestJobSnapshotsEN(t *testing.T) {
+	runJobSnapshots(t, "en")
+}
+
 func TestJobSnapshotsZhCN(t *testing.T) {
-	path := snaptest.GoldenFileT(t, "job", goldenStemJob, "zh-CN")
-	home := t.TempDir()
-	baseEnv := snaptest.EnvMinimal(home, "zh-CN")
-	baseEnv = append(baseEnv, "CRATER_TEST_SANDBOX_HTTP=timeout")
-	bin := snaptest.CraterExecutable(t)
-	cases := jobCases()
-	results := runJobCases(t, bin, baseEnv, cases)
-	update := os.Getenv("UPDATE_SNAPSHOTS") == "1" || os.Getenv("UPDATE_SNAPSHOTS") == "true"
-	if err := snaptest.MatchOrUpdateGolden(path, "zh-CN", cases, results, update); err != nil {
-		t.Fatal(err)
-	}
+	runJobSnapshots(t, "zh-CN")
 }

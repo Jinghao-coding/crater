@@ -316,3 +316,58 @@ crater job ls --search 这是一个超过一百二十八个字符限制的搜索
     ]
   }
 }
+-- en/20-ls-page-success-nojson/argv --
+crater job ls --page 2 --page-size 2 --no-interactive
+-- en/20-ls-page-success-nojson/exit --
+0
+-- en/20-ls-page-success-nojson/stdout --
+NAME                     JobName                            TYPE         STATUS         QUEUE              NODES                  RESOURCES
+training-demo            vcjob-alice-training-demo          pytorch      Running        default            gpu-02                 cpu=4,memory=16Gi,nvidia.com/a100=2
+Page 2, 3 items total
+-- en/20-ls-page-success-nojson/stderr --
+-- en/21-ls-page-success-json/argv --
+crater job ls --page 2 --page-size 2 --json --no-interactive
+-- en/21-ls-page-success-json/exit --
+0
+-- en/21-ls-page-success-json/stdout --
+{
+  "data": {
+    "jobs": [
+      {
+        "name": "training-demo",
+        "jobName": "vcjob-alice-training-demo",
+        "owner": "alice",
+        "userInfo": {
+          "username": "alice",
+          "nickname": "Alice"
+        },
+        "jobType": "pytorch",
+        "scheduleType": 0,
+        "queue": "default",
+        "status": "Running",
+        "createdAt": "2026-07-25T08:00:00Z",
+        "startedAt": "2026-07-25T08:01:00Z",
+        "completedAt": "0001-01-01T00:00:00Z",
+        "nodes": [
+          "gpu-02"
+        ],
+        "resources": {
+          "cpu": "4",
+          "memory": "16Gi",
+          "nvidia.com/a100": "2"
+        },
+        "locked": false,
+        "permanentLocked": false,
+        "lockedTimestamp": "0001-01-01T00:00:00Z",
+        "billedPointsTotal": 12.5
+      }
+    ],
+    "pagination": {
+      "page": 2,
+      "page_size": 2,
+      "total": 3
+    }
+  },
+  "status": "OK"
+}
+-- en/21-ls-page-success-json/stderr --

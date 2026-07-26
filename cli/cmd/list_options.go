@@ -31,6 +31,9 @@ func listPaginationOptions(
 	page, _ := cmd.Flags().GetInt("page")
 	pageSize, _ := cmd.Flags().GetInt("page-size")
 	allPages, _ := cmd.Flags().GetBool("all-pages")
+	if allPages && !cmd.Flags().Changed("page-size") {
+		pageSize = maxPageSize
+	}
 	issues := make([]usageIssue, 0, 2)
 	if page < 1 {
 		issues = append(issues, invalidIssue("page", i18n.T("err_page_min")))

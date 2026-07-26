@@ -22,7 +22,7 @@
 
 - `--page` (int, default `1`): 当前页，从 `1` 开始。
 - `--page-size` (int, default `15`): 每页数量。公共上限为 `200`；`crater download ls` 及兼容的 `model-download ls`/管理员列表上限为 `100`。
-- `--all-pages` (bool): 从第一页开始返回全部筛选结果；此时 `--page` 不决定起始页。
+- `--all-pages` (bool): 从第一页开始返回全部筛选结果；此时 `--page` 不决定起始页。服务端分页命令在未显式提供 `--page-size` 时使用该端点允许的最大批量，显式提供的合法值仍优先。
 
 共同语义：
 
@@ -351,8 +351,8 @@
 - **位置参数**:
   - `<name>` (positional, required): 节点名称。
 - **选项**:
-  - `--namespace` (string, default `crater-workspace`): 仅显示指定命名空间中的 Pod。
-  - `--all-namespaces` (bool): 显示所有命名空间；与显式 `--namespace` 互斥。
+  - `--namespace` (string): 仅显示指定命名空间中的 Pod；未使用 `--all-namespaces` 时必填。
+  - `--all-namespaces` (bool): 显示所有命名空间；与 `--namespace` 互斥。
   - `--status` (string): 按 Pod 阶段过滤：`Pending | Running | Succeeded | Failed | Unknown`。
   - `--type` (string): 按控制器类型过滤：`batch.volcano.sh/v1alpha1/Job | aisystem.github.com/v1alpha1/AIJob`。
   - `--search` (string): 按 Pod 名称子串过滤。
@@ -360,6 +360,7 @@
   - `--all-pages` (bool): 不截断，返回全部过滤结果。
 - **处理逻辑**:
   - 调用 `/api/v1/nodes/{name}/pods`。
+  - 平台当前没有向普通用户暴露作业命名空间配置，因此 CLI 不猜测固定默认值；必须显式选择 `--namespace` 或 `--all-namespaces`。
   - CLI 会从 owner reference 补齐缺失的控制器类型，先在本地执行命名空间、状态、类型和名称过滤，再按 Pod 名称、命名空间稳定排序并分页。
   - 默认模式以表格展示 Pod 名称、命名空间、IP、状态、类型和资源。
 - **`--json` 的 `data`**：`pods`（当前页数组）和 `pagination`（`page`、`page_size`、过滤后的 `total`）；`--all-pages` 时省略 `pagination`。
@@ -702,11 +703,11 @@ This section records the read-only API surface covered by the CLI after the broa
 - `--json` success payloads use `data.message`; `approve --lock --json` also includes `data.lock_message`.
 
 ### Pod And Non-Volcano Job Diagnostics
-- 普通用户直接诊断 Job Pod 时默认使用 `crater-workspace`：
-  - `crater pod containers|events|ingresses|nodeports <pod> [--namespace NAMESPACE]`
-  - `crater pod logs <pod> <container> [--namespace NAMESPACE] [--tail N] [--timestamps] [--previous]`
+- 普通用户直接诊断 Job Pod 时必须显式指定真实命名空间：
+  - `crater pod containers|events|ingresses|nodeports <pod> --namespace NAMESPACE`
+  - `crater pod logs <pod> <container> --namespace NAMESPACE [--tail N] [--timestamps] [--previous]`
 - 为兼容旧脚本，仍接受显式 namespace 的旧位置参数形式：`... <namespace> <pod>` 与 `logs <namespace> <pod> <container>`。同一次调用不能同时提供旧位置参数 namespace 和 `--namespace`，否则返回 `usage_error`。
-- 上述命令覆盖 `/api/v1/namespaces/...` diagnostic GET APIs。`crater-workspace` 只用于没有显式 namespace 的直接 Pod 诊断；`crater job get|pods|events|yaml` 始终使用作业 API 返回的真实 namespace，不用默认值覆盖。
+- 上述命令覆盖 `/api/v1/namespaces/...` diagnostic GET APIs。平台未向普通用户暴露全局作业命名空间配置，CLI 不硬编码或猜测默认值；`crater job get|pods|events|yaml` 始终使用作业 API 返回的真实 namespace。
 - Log streaming and terminal websocket APIs are intentionally not part of this read CLI.
 - AIJob/SPJob reads are intentionally not exposed in this PR because their backend identifier contracts differ from Volcano job names and need a dedicated CLI design.
 

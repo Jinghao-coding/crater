@@ -82,7 +82,7 @@ crater node gpu --json --no-interactive
   "message": "缺少必要参数：节点名称 (\u003cname\u003e)"
 }
 -- zh-CN/08-node-pods-404-json/argv --
-crater node pods missing-node --json --no-interactive
+crater node pods missing-node --namespace team-workloads --json --no-interactive
 -- zh-CN/08-node-pods-404-json/exit --
 4
 -- zh-CN/08-node-pods-404-json/stdout --
@@ -525,19 +525,16 @@ crater admin system-config llm --json --no-interactive
     "msg": "simulated"
   }
 }
--- zh-CN/42-pod-logs-default-namespace-timeout-json/argv --
+-- zh-CN/42-pod-logs-missing-namespace-json/argv --
 crater pod logs worker-0 main --json --no-interactive
--- zh-CN/42-pod-logs-default-namespace-timeout-json/exit --
-4
--- zh-CN/42-pod-logs-default-namespace-timeout-json/stdout --
--- zh-CN/42-pod-logs-default-namespace-timeout-json/stderr --
+-- zh-CN/42-pod-logs-missing-namespace-json/exit --
+2
+-- zh-CN/42-pod-logs-missing-namespace-json/stdout --
+-- zh-CN/42-pod-logs-missing-namespace-json/stderr --
 {
-  "category": "api_error",
-  "code": "ERR_NETWORK_FAILURE",
-  "message": "无法连接服务器：Get \"https://example.invalid/api/v1/namespaces/crater-workspace/pods/worker-0/containers/main/log?previous=false\u0026timestamps=false\": context deadline exceeded",
-  "context": {
-    "msg": "network error: Get \"https://example.invalid/api/v1/namespaces/crater-workspace/pods/worker-0/containers/main/log?previous=false\u0026timestamps=false\": context deadline exceeded"
-  }
+  "category": "usage_error",
+  "code": "ERR_MISSING_REQUIRED_FLAG",
+  "message": "缺少必要参数：命名空间 (--namespace)"
 }
 -- zh-CN/43-node-pods-multiple-list-issues-json/argv --
 crater node pods gpu-01 --namespace kube-system --all-namespaces --page 0 --status bad --json --no-interactive

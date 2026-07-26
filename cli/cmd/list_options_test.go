@@ -22,6 +22,58 @@ func TestReadListPaginationOptionsDefaults(t *testing.T) {
 	}
 }
 
+func TestReadListPaginationOptionsUsesMaxBatchForAllPages(t *testing.T) {
+	tests := []struct {
+		name        string
+		maxPageSize int
+		explicit    string
+		want        int
+	}{
+		{name: "common maximum", maxPageSize: maxCLIPageSize, want: maxCLIPageSize},
+		{name: "endpoint maximum", maxPageSize: 100, want: 100},
+		{name: "explicit value", maxPageSize: maxCLIPageSize, explicit: "15", want: 15},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			addListPaginationFlags(cmd)
+			if err := cmd.Flags().Set("all-pages", "true"); err != nil {
+				t.Fatal(err)
+			}
+			if tt.explicit != "" {
+				if err := cmd.Flags().Set("page-size", tt.explicit); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			options, err := readListPaginationOptionsWithMax(cmd, tt.maxPageSize)
+			if err != nil {
+				t.Fatalf("readListPaginationOptionsWithMax: %v", err)
+			}
+			if options.PageSize != tt.want || !options.AllPages {
+				t.Fatalf("unexpected all-pages options: %#v", options)
+			}
+		})
+	}
+}
+
+func TestReadListPaginationOptionsRejectsExplicitInvalidAllPagesSize(t *testing.T) {
+	cmd := &cobra.Command{}
+	addListPaginationFlags(cmd)
+	if err := cmd.Flags().Set("all-pages", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("page-size", "201"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := readListPaginationOptions(cmd)
+	if err == nil || !strings.Contains(err.Error(), "page-size must be between 1 and 200") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestReadListPaginationOptionsRejectsInvalidValues(t *testing.T) {
 	cmd := &cobra.Command{}
 	addListPaginationFlags(cmd)
@@ -83,27 +135,28 @@ func TestListPagePayloadOmitsPaginationForAllPages(t *testing.T) {
 	}
 }
 
-func TestNodePodFiltersDefaultNamespaceBeforePagination(t *testing.T) {
+func TestNodePodFiltersExplicitNamespaceBeforePagination(t *testing.T) {
+	const workloadNamespace = "team-workloads"
 	pods := []api.PodInfo{
-		{Name: "workspace-b", Namespace: defaultWorkloadNamespace, Status: "Running"},
+		{Name: "workspace-b", Namespace: workloadNamespace, Status: "Running"},
 		{Name: "system", Namespace: "kube-system", Status: "Running"},
-		{Name: "workspace-a", Namespace: defaultWorkloadNamespace, Status: "Pending"},
+		{Name: "workspace-a", Namespace: workloadNamespace, Status: "Pending"},
 	}
 	filtered := filterNodePods(pods, nodePodListOptions{
-		Namespace: defaultWorkloadNamespace,
+		Namespace: workloadNamespace,
 	})
 	page := paginateList(filtered, api.ListOptions{PageSize: 1})
 	if page.Total != 2 || len(page.Items) != 1 {
 		t.Fatalf("unexpected filtered page: %#v", page)
 	}
-	if page.Items[0].Namespace != defaultWorkloadNamespace {
+	if page.Items[0].Namespace != workloadNamespace {
 		t.Fatalf("unexpected namespace: %#v", page.Items[0])
 	}
 }
 
 func TestNodePodNamespaceFlagsConflict(t *testing.T) {
 	cmd := &cobra.Command{}
-	cmd.Flags().String("namespace", defaultWorkloadNamespace, "")
+	cmd.Flags().String("namespace", "", "")
 	cmd.Flags().String("status", "", "")
 	cmd.Flags().String("type", "", "")
 	cmd.Flags().String("search", "", "")
@@ -120,6 +173,40 @@ func TestNodePodNamespaceFlagsConflict(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "--namespace and --all-namespaces") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+func TestNodePodNamespaceIsRequiredUnlessAllNamespaces(t *testing.T) {
+	newCommand := func() *cobra.Command {
+		cmd := &cobra.Command{}
+		cmd.Flags().String("namespace", "", "")
+		cmd.Flags().String("status", "", "")
+		cmd.Flags().String("type", "", "")
+		cmd.Flags().String("search", "", "")
+		cmd.Flags().Bool("all-namespaces", false, "")
+		addListPaginationFlags(cmd)
+		return cmd
+	}
+
+	t.Run("missing namespace", func(t *testing.T) {
+		_, err := readNodePodListOptions(newCommand())
+		if err == nil || !strings.Contains(err.Error(), "--namespace or --all-namespaces is required") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("all namespaces", func(t *testing.T) {
+		cmd := newCommand()
+		if err := cmd.Flags().Set("all-namespaces", "true"); err != nil {
+			t.Fatal(err)
+		}
+		options, err := readNodePodListOptions(cmd)
+		if err != nil {
+			t.Fatalf("readNodePodListOptions: %v", err)
+		}
+		if !options.AllNamespaces || options.Namespace != "" {
+			t.Fatalf("unexpected options: %#v", options)
+		}
+	})
 }
 
 func TestNormalizePodTypesPrefersControllerOwner(t *testing.T) {

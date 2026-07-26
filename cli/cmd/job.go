@@ -1396,7 +1396,7 @@ func printJobTable(jobs []api.JobInfo) {
 		i18n.PadRight(i18n.T("table_status"), 14),
 		i18n.PadRight(i18n.T("table_queue"), 18),
 		i18n.PadRight(i18n.T("table_nodes"), 22),
-		i18n.PadRight(i18n.T("table_resources"), 24))
+		i18n.T("table_resources"))
 	for _, job := range jobs {
 		fmt.Printf("%s %s %s %s %s %s %s\n",
 			i18n.PadRight(job.Name, 24),
@@ -1405,7 +1405,7 @@ func printJobTable(jobs []api.JobInfo) {
 			i18n.PadRight(job.Status, 14),
 			i18n.PadRight(job.Queue, 18),
 			i18n.PadRight(strings.Join(job.Nodes, ","), 22),
-			i18n.PadRight(formatResources(job.Resources), 24))
+			formatResources(job.Resources))
 	}
 }
 

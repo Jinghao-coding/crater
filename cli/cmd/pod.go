@@ -168,7 +168,7 @@ func runPodNodeports(cmd *cobra.Command, args []string) error {
 
 func init() {
 	for _, cmd := range []*cobra.Command{podContainersCmd, podEventsCmd, podLogsCmd, podIngressesCmd, podNodeportsCmd} {
-		cmd.Flags().String("namespace", defaultWorkloadNamespace, i18n.T("flag_namespace"))
+		cmd.Flags().String("namespace", "", i18n.T("flag_namespace"))
 	}
 	podLogsCmd.Flags().Bool("timestamps", false, "Include timestamps in logs")
 	podLogsCmd.Flags().Bool("previous", false, "Return previous terminated container logs")

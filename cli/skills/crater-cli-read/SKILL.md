@@ -37,8 +37,8 @@ metadata:
 ```bash
 crater node ls --json
 crater node get gpu-node-01 --json
-crater node pods gpu-node-01 --page-size 15 --json
-crater node pods gpu-node-01 --type batch.volcano.sh/v1alpha1/Job --json
+crater node pods gpu-node-01 --namespace team-workloads --page-size 15 --json
+crater node pods gpu-node-01 --namespace team-workloads --type batch.volcano.sh/v1alpha1/Job --json
 crater node pods gpu-node-01 --all-namespaces --all-pages --json
 crater node gpu gpu-node-01 --json
 crater job ls --search experiment --page-size 15 --json
@@ -61,8 +61,8 @@ crater context resources --json
 crater billing jobs --all --days 7 --search experiment --page-size 15 --json
 crater order ls --status Pending --page-size 15 --json
 crater user get wangjh --json
-crater pod containers my-pod --json
-crater pod logs my-pod main --tail 100 --json
+crater pod containers my-pod --namespace team-workloads --json
+crater pod logs my-pod main --namespace team-workloads --tail 100 --json
 ```
 
 ## 排查顺序
@@ -70,6 +70,6 @@ crater pod logs my-pod main --tail 100 --json
 1. 先用 `crater auth ls --json` 确认存在 active credentials。
 2. 需要机器解析时加 `--json --no-interactive`，读取 stdout 中的 `data.*` 对象，例如 `data.nodes`、`data.jobs`、`data.images`、`data.resources`。
 3. 公共分页列表默认每页 `15` 条，并返回 `data.pagination`。优先按页读取；只有明确需要完整结果时才使用 `--all-pages`。Job/download 使用服务端分页；Pod、工单、镜像、计费等数组列表会先完成命令约定的本地筛选再分页。
-4. `node pods` 和直接 `pod containers|events|logs|ingresses|nodeports` 默认 namespace 为 `crater-workspace`。直接 Pod 命令可用 `--namespace` 覆盖，也兼容旧的显式 namespace 位置参数。`job get|pods|events|yaml` 按作业 API 定位并保留后端真实 namespace，不要把默认值强行套到这些响应上。
+4. `node pods` 必须显式提供 `--namespace` 或 `--all-namespaces`；直接 `pod containers|events|logs|ingresses|nodeports` 必须提供 `--namespace`，也兼容旧的显式 namespace 位置参数。平台没有向普通用户暴露全局作业命名空间配置，因此不要猜测固定默认值；`job get|pods|events|yaml` 按作业 API 定位并保留后端真实 namespace。
 5. Volcano 作业使用 `crater job`。AIJob/SPJob 读命令暂未暴露在本 Skill 中，避免错误使用不一致的后端 ID 契约。
 6. API 失败时根据 stderr JSON 的 `category`、`code`、`context.http_status` 判断是未登录、无权限、资源不存在还是服务端错误；`usage_error` 有 `context.issues` 时一次修正全部字段。

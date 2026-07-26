@@ -12,7 +12,7 @@ import (
 func newPodOptionsTestCommand(t *testing.T, namespace string) *cobra.Command {
 	t.Helper()
 	cmd := &cobra.Command{}
-	cmd.Flags().String("namespace", defaultWorkloadNamespace, "")
+	cmd.Flags().String("namespace", "", "")
 	if namespace != "" {
 		if err := cmd.Flags().Set("namespace", namespace); err != nil {
 			t.Fatal(err)
@@ -21,15 +21,16 @@ func newPodOptionsTestCommand(t *testing.T, namespace string) *cobra.Command {
 	return cmd
 }
 
-func TestPodNSAndNameDefaultsNamespace(t *testing.T) {
+func TestPodNSAndNameRequiresNamespace(t *testing.T) {
 	cmd := newPodOptionsTestCommand(t, "")
 
-	namespace, name, err := podNSAndName(cmd, []string{"worker-0"})
-	if err != nil {
-		t.Fatalf("podNSAndName: %v", err)
+	_, _, err := podNSAndName(cmd, []string{"worker-0"})
+	var cliErr *clierror.Error
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected structured CLI error, got %T: %v", err, err)
 	}
-	if namespace != defaultWorkloadNamespace || name != "worker-0" {
-		t.Fatalf("unexpected target: namespace=%q name=%q", namespace, name)
+	if cliErr.Category != errorcodes.CategoryUsage || cliErr.Code != errorcodes.ErrMissingRequiredFlag {
+		t.Fatalf("unexpected CLI error: %#v", cliErr)
 	}
 }
 
@@ -59,16 +60,17 @@ func TestPodNSAndNameSupportsNamespaceFlagAndLegacyArguments(t *testing.T) {
 	})
 }
 
-func TestPodLogsDefaultsNamespaceAndSupportsLegacyArguments(t *testing.T) {
-	t.Run("default namespace", func(t *testing.T) {
+func TestPodLogsRequiresNamespaceAndSupportsLegacyArguments(t *testing.T) {
+	t.Run("missing namespace", func(t *testing.T) {
 		cmd := newPodOptionsTestCommand(t, "")
 
-		namespace, name, container, err := podNSNameAndContainer(cmd, []string{"worker-0", "main"})
-		if err != nil {
-			t.Fatalf("podNSNameAndContainer: %v", err)
+		_, _, _, err := podNSNameAndContainer(cmd, []string{"worker-0", "main"})
+		var cliErr *clierror.Error
+		if !errors.As(err, &cliErr) {
+			t.Fatalf("expected structured CLI error, got %T: %v", err, err)
 		}
-		if namespace != defaultWorkloadNamespace || name != "worker-0" || container != "main" {
-			t.Fatalf("unexpected target: namespace=%q name=%q container=%q", namespace, name, container)
+		if cliErr.Category != errorcodes.CategoryUsage || cliErr.Code != errorcodes.ErrMissingRequiredFlag {
+			t.Fatalf("unexpected CLI error: %#v", cliErr)
 		}
 	})
 
@@ -116,7 +118,7 @@ func TestPodNamespaceFlagConflictsWithLegacyArguments(t *testing.T) {
 	}
 }
 
-func TestPodCommandsDefaultNamespaceFlag(t *testing.T) {
+func TestPodCommandsHaveNoHardcodedNamespaceDefault(t *testing.T) {
 	commands := []*cobra.Command{
 		podContainersCmd,
 		podEventsCmd,
@@ -130,8 +132,8 @@ func TestPodCommandsDefaultNamespaceFlag(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s namespace flag: %v", cmd.Name(), err)
 		}
-		if namespace != defaultWorkloadNamespace {
-			t.Fatalf("%s namespace default = %q, want %q", cmd.Name(), namespace, defaultWorkloadNamespace)
+		if namespace != "" {
+			t.Fatalf("%s namespace default = %q, want empty", cmd.Name(), namespace)
 		}
 	}
 }

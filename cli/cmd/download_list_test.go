@@ -61,6 +61,22 @@ func TestReadDownloadListOptions(t *testing.T) {
 	}
 }
 
+func TestReadDownloadListOptionsUsesEndpointMaxBatchForAllPages(t *testing.T) {
+	cmd := &cobra.Command{}
+	addDownloadListFlags(cmd)
+	if err := cmd.Flags().Set("all-pages", "true"); err != nil {
+		t.Fatal(err)
+	}
+
+	options, err := readDownloadListOptions(cmd)
+	if err != nil {
+		t.Fatalf("readDownloadListOptions returned error: %v", err)
+	}
+	if !options.AllPages || options.PageSize != maxDownloadPageSize {
+		t.Fatalf("unexpected all-pages pagination: %#v", options.ListOptions)
+	}
+}
+
 func TestReadDownloadListOptionsUsesEndpointPageSizeLimit(t *testing.T) {
 	cmd := &cobra.Command{}
 	addDownloadListFlags(cmd)
