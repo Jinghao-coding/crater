@@ -128,6 +128,55 @@ func TestWriteJobLogsPrefixesMultipleSources(t *testing.T) {
 	}
 }
 
+func TestWriteJobLogSourcesWritesBeforeFetchingNextSource(t *testing.T) {
+	sources := []jobLogSource{
+		{Namespace: "ns", Pod: "master-0", Container: "master"},
+		{Namespace: "ns", Pod: "worker-0", Container: "worker"},
+	}
+	var got bytes.Buffer
+	call := 0
+	client := jobLogGetterFunc(func(namespace, pod, container string, options api.PodLogOptions) ([]byte, error) {
+		call++
+		switch call {
+		case 1:
+			if namespace != "ns" || pod != "master-0" || container != "master" {
+				t.Fatalf("first source = %s/%s/%s", namespace, pod, container)
+			}
+			if options.TailLines != 25 {
+				t.Fatalf("tail lines = %d, want 25", options.TailLines)
+			}
+			return []byte("ready\n"), nil
+		case 2:
+			if got.String() != "[master-0/master] ready\n" {
+				t.Fatalf("output before second fetch = %q", got.String())
+			}
+			if namespace != "ns" || pod != "worker-0" || container != "worker" {
+				t.Fatalf("second source = %s/%s/%s", namespace, pod, container)
+			}
+			return []byte("step 1\nstep 2"), nil
+		default:
+			t.Fatalf("unexpected fetch %d", call)
+			return nil, nil
+		}
+	})
+
+	if err := writeJobLogSources(
+		&got,
+		client,
+		sources,
+		api.PodLogOptions{TailLines: 25},
+		true,
+	); err != nil {
+		t.Fatalf("writeJobLogSources: %v", err)
+	}
+	want := "[master-0/master] ready\n" +
+		"[worker-0/worker] step 1\n" +
+		"[worker-0/worker] step 2\n"
+	if got.String() != want {
+		t.Fatalf("output = %q, want %q", got.String(), want)
+	}
+}
+
 func TestLinePrefixWriterHandlesChunkBoundaries(t *testing.T) {
 	var got bytes.Buffer
 	writer := &linePrefixWriter{
@@ -195,4 +244,20 @@ func (shortWriter) Write(data []byte) (int, error) {
 		return 0, nil
 	}
 	return len(data) - 1, nil
+}
+
+type jobLogGetterFunc func(
+	namespace,
+	pod,
+	container string,
+	options api.PodLogOptions,
+) ([]byte, error)
+
+func (f jobLogGetterFunc) GetPodLogs(
+	namespace,
+	pod,
+	container string,
+	options api.PodLogOptions,
+) ([]byte, error) {
+	return f(namespace, pod, container, options)
 }

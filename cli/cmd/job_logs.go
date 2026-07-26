@@ -119,6 +119,16 @@ func runJobLogs(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	if !outputJSON {
+		return writeJobLogSources(
+			os.Stdout,
+			client,
+			sources,
+			logOptions,
+			options.Prefix || len(sources) > 1,
+		)
+	}
+
 	results := make([]jobLogResult, 0, len(sources))
 	for _, source := range sources {
 		data, err := client.GetPodLogs(
@@ -138,15 +148,9 @@ func runJobLogs(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	if outputJSON {
-		return output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(map[string]interface{}{
-			"logs": results,
-		}))
-	}
-	if err := writeJobLogs(os.Stdout, results, options.Prefix || len(results) > 1); err != nil {
-		return cliErrFromPodLog(&api.PodLogWriteError{Cause: err})
-	}
-	return nil
+	return output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(map[string]interface{}{
+		"logs": results,
+	}))
 }
 
 func readJobLogOptions(cmd *cobra.Command) (jobLogOptions, error) {
@@ -333,23 +337,53 @@ func selectJobLogContainers(
 
 func writeJobLogs(dst io.Writer, results []jobLogResult, prefix bool) error {
 	for _, result := range results {
-		data := []byte(result.Content)
-		if prefix {
-			if err := writePrefixedLog(dst, jobLogPrefix(jobLogSource{
-				Pod:       result.Pod,
-				Container: result.Container,
-			}), data); err != nil {
-				return err
-			}
-			continue
-		}
-		if _, err := dst.Write(data); err != nil {
+		if err := writeJobLog(dst, jobLogSource{
+			Pod:       result.Pod,
+			Container: result.Container,
+		}, []byte(result.Content), prefix); err != nil {
 			return err
 		}
-		if len(data) > 0 && !bytes.HasSuffix(data, []byte("\n")) {
-			if _, err := io.WriteString(dst, "\n"); err != nil {
-				return err
-			}
+	}
+	return nil
+}
+
+func writeJobLog(dst io.Writer, source jobLogSource, data []byte, prefix bool) error {
+	if prefix {
+		return writePrefixedLog(dst, jobLogPrefix(source), data)
+	}
+	if _, err := dst.Write(data); err != nil {
+		return err
+	}
+	if len(data) > 0 && !bytes.HasSuffix(data, []byte("\n")) {
+		_, err := io.WriteString(dst, "\n")
+		return err
+	}
+	return nil
+}
+
+type jobLogGetter interface {
+	GetPodLogs(namespace, pod, container string, options api.PodLogOptions) ([]byte, error)
+}
+
+func writeJobLogSources(
+	dst io.Writer,
+	client jobLogGetter,
+	sources []jobLogSource,
+	options api.PodLogOptions,
+	prefix bool,
+) error {
+	for _, source := range sources {
+		data, err := client.GetPodLogs(
+			source.Namespace,
+			source.Pod,
+			source.Container,
+			options,
+		)
+		if err != nil {
+			return cliErrFromPodLog(err)
+		}
+		if err := writeJobLog(dst, source, data, prefix); err != nil {
+			return cliErrFromPodLog(&api.PodLogWriteError{Cause: err})
 		}
 	}
 	return nil
