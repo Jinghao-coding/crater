@@ -500,13 +500,14 @@ CLI 发出的平台请求带 `User-Agent: crater-cli/<product-version>` 与 `X-C
   - `--timestamps` (bool): 包含 Kubernetes 日志时间戳。
   - `--previous` / `-p` (bool): 获取上一个已终止容器实例的日志。
   - `--follow` / `-f` (bool): 实时跟随日志，仅支持一个 Pod 和一个容器；不能与 `--previous` 或 `--json` 同时使用。
-  - `--prefix` (bool): 为每行添加 `[pod/container]` 前缀。选择多个日志来源时自动启用前缀。
+  - `--prefix` (bool): 仅为文本输出的每行添加 `[pod/container]` 前缀。选择多个日志来源时自动启用前缀；JSON 已提供独立的 `pod` 和 `container` 字段，不受该选项影响。
 - **选择逻辑**:
   - 单 Pod、单普通容器会自动选择；默认忽略 init container。
+  - Pod 仅包含 init container 时不会自动回退；必须使用 `--container` 或 `--all-containers` 显式选择。
   - 多 Pod 必须使用 `--pod` 或 `--all-pods`。
   - Pod 中存在多个普通容器时必须使用 `--container` 或 `--all-containers`。
   - 所有候选项和多来源输出均按 Pod、容器名称稳定排序。
-- **`--json` 的 `data`**：`logs`（数组）；每项固定包含 `namespace`、`pod`、`container`、`content`。
+- **`--json` 的 `data`**：`logs`（数组）；每项固定包含 `namespace`、`pod`、`container`、`content`。`--prefix` 仅影响文本输出，不修改 JSON 内容。
 - **状态**: [x] Completed
 
 ### `crater job token|secret|ssh|snapshot|alert|delete <name>`

@@ -320,7 +320,14 @@ func selectJobLogContainers(
 		return all, nil
 	}
 	if len(regular) == 0 {
-		regular = all
+		return nil, newJobLogUsageError(
+			errorcodes.ErrNotFound,
+			i18n.T("err_job_logs_no_regular_containers", podName, joinContainerNames(all)),
+			map[string]interface{}{
+				"pod":                  podName,
+				"available_containers": containerNames(all),
+			},
+		)
 	}
 	if len(regular) == 1 {
 		return regular, nil
@@ -501,7 +508,7 @@ func cliErrFromPodLog(err error) error {
 	if errors.As(err, &protocolErr) {
 		return &clierror.Error{
 			Category: errorcodes.CategoryAPI,
-			Code:     errorcodes.ErrAPIVersionMismatch,
+			Code:     errorcodes.ErrAPIOther,
 			Message:  i18n.T("err_job_logs_protocol", protocolErr.Cause),
 		}
 	}
@@ -517,7 +524,7 @@ func addJobLogFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("timestamps", false, "Include timestamps in logs")
 	cmd.Flags().BoolP("previous", "p", false, "Return previous terminated container logs")
 	cmd.Flags().BoolP("follow", "f", false, "Follow a single pod container log")
-	cmd.Flags().Bool("prefix", false, "Prefix every line with pod and container names")
+	cmd.Flags().Bool("prefix", false, "Prefix text output lines with pod and container names")
 }
 
 func init() {

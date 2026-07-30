@@ -1,6 +1,6 @@
 ---
 name: crater-cli-job
-version: 0.2.0
+version: 0.3.0
 description: "Use Crater CLI job commands to list, inspect, view logs, create, stop, and snapshot jobs."
 metadata:
   requires:
@@ -106,4 +106,4 @@ crater job delete jpt-alice-abcde --yes --json --no-interactive
 
 Pagination and job filter validation are aggregated. If a JSON `usage_error` contains `context.issues`, fix all listed fields before retrying.
 
-`crater job logs` automatically selects a single Pod and normal container. For distributed jobs, explicitly choose `--pod` or `--all-pods`; for sidecar Pods, choose `--container` or `--all-containers`. `--follow` requires exactly one Pod and container and cannot be combined with `--json` or `--previous`.
+`crater job logs` automatically selects a single Pod and regular container. It never falls back to an init container: use `--container` or `--all-containers` to select init containers explicitly. For distributed jobs, explicitly choose `--pod` or `--all-pods`; for sidecar Pods, choose `--container` or `--all-containers`. `--follow` requires exactly one Pod and container and cannot be combined with `--json` or `--previous`. `--prefix` affects text output only; JSON already identifies each source with `pod` and `container` fields.

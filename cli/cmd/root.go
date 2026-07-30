@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 
@@ -68,7 +70,9 @@ func Execute() {
 	// BEFORE Cobra decides to render help/usage.
 	initLanguageAndHelp()
 
-	if err := rootCmd.Execute(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		err = normalizeCobraExecutionError(err)
 		handleError(err)
 		os.Exit(exitCodeFor(err))

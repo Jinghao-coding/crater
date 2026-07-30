@@ -111,6 +111,31 @@ func TestSelectJobLogContainersRequiresChoiceForSidecars(t *testing.T) {
 	}
 }
 
+func TestSelectJobLogContainersDoesNotDefaultToInitContainer(t *testing.T) {
+	containers := []api.PodContainerInfo{
+		{Name: "init-model", IsInitContainer: true},
+		{Name: "init-permissions", IsInitContainer: true},
+	}
+	_, err := selectJobLogContainers("pod-1", containers, jobLogOptions{})
+	var cliErr *clierror.Error
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("error = %v, want clierror", err)
+	}
+	if cliErr.Code != errorcodes.ErrNotFound {
+		t.Fatalf("code = %s, want %s", cliErr.Code, errorcodes.ErrNotFound)
+	}
+	if !strings.Contains(cliErr.Message, "init-model, init-permissions") ||
+		!strings.Contains(cliErr.Message, "--container or --all-containers") {
+		t.Fatalf("message = %q, want init container list and explicit selection guidance", cliErr.Message)
+	}
+	if got := cliErr.Context["available_containers"]; !reflect.DeepEqual(
+		got,
+		[]string{"init-model", "init-permissions"},
+	) {
+		t.Fatalf("available_containers = %#v", got)
+	}
+}
+
 func TestWriteJobLogsPrefixesMultipleSources(t *testing.T) {
 	results := []jobLogResult{
 		{Pod: "master-0", Container: "master", Content: "ready\n"},
@@ -230,7 +255,7 @@ func TestCliErrFromPodLogClassifiesLocalFailures(t *testing.T) {
 		var cliErr *clierror.Error
 		if !errors.As(err, &cliErr) ||
 			cliErr.Category != errorcodes.CategoryAPI ||
-			cliErr.Code != errorcodes.ErrAPIVersionMismatch ||
+			cliErr.Code != errorcodes.ErrAPIOther ||
 			!strings.Contains(cliErr.Message, "bad frame") {
 			t.Fatalf("error = %#v", err)
 		}
