@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
 
@@ -106,8 +107,11 @@ func runJobLogs(cmd *cobra.Command, args []string) error {
 			}
 		}
 		source := sources[0]
+		// Keep SIGINT handling local to the operation that consumes this context.
+		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+		defer stop()
 		if err := client.StreamPodLogs(
-			cmd.Context(),
+			ctx,
 			dst,
 			source.Namespace,
 			source.Pod,

@@ -116,7 +116,7 @@ CLI 的快照测试与可复现测试通过环境变量实现“网络与存储�
 ### 成功与错误渲染
 
 - 成功：`RunE` 在 `--json` 下调用 `output.WriteSuccessJSON(os.Stdout, output.SuccessEnvelope(...))`。
-- 失败：`Execute` 使用 `signal.NotifyContext` 将 `os.Interrupt` 传入 `rootCmd.ExecuteContext(ctx)`，并在执行返回错误后调用 `handleError`，内部为 `output.WriteError(os.Stderr, …)`；退出码由 `exitCodeFor` 结合 `pkg/errorcodes` 与 `*clierror.Error` 的 `Category` 得到。人类可读路径在 `stderr.go`：`Error:` 后按行加两格基础缩进，多行 `Message` 与行首额外空格均支持（空格与基础缩进叠加）；`--json` 时 stderr 为 `internal/output.MarshalJSONPretty` 格式化的 JSON（`message` 字段内换行仍转义为 `\n`）。
+- 失败：`Execute` 在 `rootCmd.Execute()` 返回错误后调用 `handleError`，内部为 `output.WriteError(os.Stderr, …)`；退出码由 `exitCodeFor` 结合 `pkg/errorcodes` 与 `*clierror.Error` 的 `Category` 得到。人类可读路径在 `stderr.go`：`Error:` 后按行加两格基础缩进，多行 `Message` 与行首额外空格均支持（空格与基础缩进叠加）；`--json` 时 stderr 为 `internal/output.MarshalJSONPretty` 格式化的 JSON（`message` 字段内换行仍转义为 `\n`）。需要信号取消的长连接由命令局部创建 context；`job logs --follow` 使用 `signal.NotifyContext(cmd.Context(), os.Interrupt)` 并将其传给日志流请求，不改变其它命令的 Ctrl+C 行为。
 
 ### `--json` 与解析失败
 
