@@ -28,6 +28,7 @@ import (
 	"github.com/raids-lab/crater/dao/query"
 	"github.com/raids-lab/crater/internal/bizerr"
 	"github.com/raids-lab/crater/internal/resputil"
+	"github.com/raids-lab/crater/internal/service"
 	"github.com/raids-lab/crater/internal/util"
 	"github.com/raids-lab/crater/pkg/config"
 )
@@ -43,10 +44,39 @@ const (
 	inferenceServiceAnnotationSource   = "crater.raids.io/model-source"
 	inferenceServiceAnnotationModelID  = "crater.raids.io/platform-model-id"
 
-	kthenaNamespace     = "kthena-system"
-	kthenaRouterService = "kthena-router"
-	kthenaProxyPrefix   = "openai"
-	kthenaSchedulerName = "volcano"
+	kthenaNamespace                       = "kthena-system"
+	kthenaRouterService                   = "kthena-router"
+	kthenaProxyPrefix                     = "openai"
+	kthenaSchedulerName                   = "volcano"
+	kthenaSpecTypeKey                     = "type"
+	kthenaWorkloadServingAPIGroup         = "workload.serving.volcano.sh"
+	kthenaNetworkingServingAPIGroup       = "networking.serving.volcano.sh"
+	kthenaAPIVersion                      = "v1alpha1"
+	kthenaKindModelBooster                = "ModelBooster"
+	kthenaKindModelBoosterList            = "ModelBoosterList"
+	kthenaKindModelServing                = "ModelServing"
+	kthenaKindModelServingList            = "ModelServingList"
+	kthenaKindModelRoute                  = "ModelRoute"
+	kthenaKindModelRouteList              = "ModelRouteList"
+	kthenaKindModelServer                 = "ModelServer"
+	kthenaKindModelServerList             = "ModelServerList"
+	kthenaBackendVLLM                     = "vLLM"
+	kthenaDefaultCacheURI                 = "hostpath:///tmp/cache"
+	kthenaDefaultWorkerMemory             = "4Gi"
+	kthenaEnvValueKey                     = "value"
+	kthenaResourceCPUKey                  = "cpu"
+	kthenaResourceMemoryKey               = "memory"
+	kthenaPhasePending                    = "Pending"
+	kthenaPhaseReady                      = "Ready"
+	kthenaPhaseActive                     = "Active"
+	kthenaPhaseDegraded                   = "Degraded"
+	kthenaPhaseProgressing                = "Progressing"
+	kthenaDiagnosticLevelWarning          = "warning"
+	kthenaMaxReplicas               int64 = 1_000_000
+	kthenaRelatedResourceCapacity         = 4
+	kthenaLogVerbosity                    = 4
+	kthenaMaxDiagnostics                  = 10
+	kthenaDefaultLogTailLines       int64 = 80
 
 	inferenceModelSourcePlatform = "platform"
 	inferenceModelSourceExternal = "external"
@@ -54,44 +84,29 @@ const (
 
 var (
 	modelBoosterGVK = schema.GroupVersionKind{
-		Group:   "workload.serving.volcano.sh",
-		Version: "v1alpha1",
-		Kind:    "ModelBooster",
+		Group:   kthenaWorkloadServingAPIGroup,
+		Version: kthenaAPIVersion,
+		Kind:    kthenaKindModelBooster,
 	}
 	modelBoosterListGVK = schema.GroupVersionKind{
-		Group:   "workload.serving.volcano.sh",
-		Version: "v1alpha1",
-		Kind:    "ModelBoosterList",
-	}
-	modelServingGVK = schema.GroupVersionKind{
-		Group:   "workload.serving.volcano.sh",
-		Version: "v1alpha1",
-		Kind:    "ModelServing",
+		Group:   kthenaWorkloadServingAPIGroup,
+		Version: kthenaAPIVersion,
+		Kind:    kthenaKindModelBoosterList,
 	}
 	modelServingListGVK = schema.GroupVersionKind{
-		Group:   "workload.serving.volcano.sh",
-		Version: "v1alpha1",
-		Kind:    "ModelServingList",
-	}
-	modelRouteGVK = schema.GroupVersionKind{
-		Group:   "networking.serving.volcano.sh",
-		Version: "v1alpha1",
-		Kind:    "ModelRoute",
+		Group:   kthenaWorkloadServingAPIGroup,
+		Version: kthenaAPIVersion,
+		Kind:    kthenaKindModelServingList,
 	}
 	modelRouteListGVK = schema.GroupVersionKind{
-		Group:   "networking.serving.volcano.sh",
-		Version: "v1alpha1",
-		Kind:    "ModelRouteList",
-	}
-	modelServerGVK = schema.GroupVersionKind{
-		Group:   "networking.serving.volcano.sh",
-		Version: "v1alpha1",
-		Kind:    "ModelServer",
+		Group:   kthenaNetworkingServingAPIGroup,
+		Version: kthenaAPIVersion,
+		Kind:    kthenaKindModelRouteList,
 	}
 	modelServerListGVK = schema.GroupVersionKind{
-		Group:   "networking.serving.volcano.sh",
-		Version: "v1alpha1",
-		Kind:    "ModelServerList",
+		Group:   kthenaNetworkingServingAPIGroup,
+		Version: kthenaAPIVersion,
+		Kind:    kthenaKindModelServerList,
 	}
 	inferenceServiceNameRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 )
@@ -102,18 +117,29 @@ func init() {
 }
 
 type KthenaMgr struct {
-	name       string
-	client     client.Client
-	kubeClient kubernetes.Interface
-	namespace  string
+	name                string
+	client              client.Client
+	kubeClient          kubernetes.Interface
+	configService       *service.ConfigService
+	conversationStore   *kthenaConversationStore
+	proxyKthenaRouterFn func(
+		ctx context.Context,
+		method string,
+		targetPath string,
+		body []byte,
+		headers http.Header,
+	) ([]byte, error)
+	namespace string
 }
 
 func NewKthenaMgr(conf *RegisterConfig) Manager {
 	return &KthenaMgr{
-		name:       "kthena",
-		client:     conf.Client,
-		kubeClient: conf.KubeClient,
-		namespace:  config.GetConfig().Namespaces.Job,
+		name:              "kthena",
+		client:            conf.Client,
+		kubeClient:        conf.KubeClient,
+		configService:     conf.ConfigService,
+		conversationStore: newKthenaConversationStore(query.GetDB()),
+		namespace:         config.GetConfig().Namespaces.Job,
 	}
 }
 
@@ -122,9 +148,18 @@ func (mgr *KthenaMgr) GetName() string { return mgr.name }
 func (mgr *KthenaMgr) RegisterPublic(_ *gin.RouterGroup) {}
 
 func (mgr *KthenaMgr) RegisterProtected(g *gin.RouterGroup) {
-	services := g.Group("inference-services")
+	services := g.Group("inference-services", mgr.requireKthenaInferenceEnabled)
 	services.POST("", mgr.CreateKthenaService)
 	services.GET("", mgr.ListKthenaServices)
+	services.GET(":name/conversations", mgr.ListKthenaConversations)
+	services.POST(":name/conversations", mgr.CreateKthenaConversation)
+	// Register the static `turns` route before the parameterized session route
+	// so an old client may send an empty sessionId in the JSON body.
+	services.POST(":name/conversations/turns", mgr.CreateKthenaConversationTurnWithoutSession)
+	services.POST(":name/conversations/:sessionID/turns", mgr.CreateKthenaConversationTurn)
+	services.GET(":name/conversations/:sessionID", mgr.GetKthenaConversation)
+	services.PATCH(":name/conversations/:sessionID", mgr.UpdateKthenaConversation)
+	services.DELETE(":name/conversations/:sessionID", mgr.DeleteKthenaConversation)
 	services.Any(":name/"+kthenaProxyPrefix+"/*path", mgr.ProxyKthenaService)
 	services.GET(":name", mgr.GetKthenaService)
 	services.GET(":name/yaml", mgr.GetKthenaServiceYaml)
@@ -132,11 +167,20 @@ func (mgr *KthenaMgr) RegisterProtected(g *gin.RouterGroup) {
 }
 
 func (mgr *KthenaMgr) RegisterAdmin(g *gin.RouterGroup) {
-	services := g.Group("inference-services")
+	services := g.Group("inference-services", mgr.requireKthenaInferenceEnabled)
 	services.GET("", mgr.AdminListKthenaServices)
 	services.GET(":name", mgr.AdminGetKthenaService)
 	services.GET(":name/yaml", mgr.AdminGetKthenaServiceYaml)
 	services.DELETE(":name", mgr.AdminDeleteKthenaService)
+}
+
+func (mgr *KthenaMgr) requireKthenaInferenceEnabled(c *gin.Context) {
+	if mgr.configService == nil || !mgr.configService.IsKthenaInferenceEnabled(c.Request.Context()) {
+		resputil.HandleError(c, bizerr.Conflict.ResourceStatusError.New("Kthena inference feature is disabled"))
+		c.Abort()
+		return
+	}
+	c.Next()
 }
 
 type KthenaWorkerReq struct {
@@ -158,8 +202,7 @@ type CreateKthenaReq struct {
 	ServedModel     string                           `json:"servedModel"`
 	BackendType     string                           `json:"backendType"`
 	CacheURI        string                           `json:"cacheURI"`
-	MinReplicas     int64                            `json:"minReplicas"`
-	MaxReplicas     int64                            `json:"maxReplicas"`
+	Replicas        int64                            `json:"replicas"`
 	Env             map[string]string                `json:"env,omitempty"`
 	Worker          KthenaWorkerReq                  `json:"worker" binding:"required"`
 	Selectors       []corev1.NodeSelectorRequirement `json:"selectors,omitempty"`
@@ -169,14 +212,15 @@ type CreateKthenaReq struct {
 type KthenaServiceResp struct {
 	Name              string             `json:"name"`
 	Namespace         string             `json:"namespace"`
+	Owner             string             `json:"owner"`
+	UserInfo          model.UserInfo     `json:"userInfo"`
 	ModelSource       string             `json:"modelSource"`
 	PlatformModelID   uint               `json:"platformModelId"`
 	ModelURI          string             `json:"modelURI"`
 	ServedModel       string             `json:"servedModel"`
 	BackendType       string             `json:"backendType"`
 	CacheURI          string             `json:"cacheURI"`
-	MinReplicas       int64              `json:"minReplicas"`
-	MaxReplicas       int64              `json:"maxReplicas"`
+	Replicas          int64              `json:"replicas"`
 	WorkerImage       string             `json:"workerImage"`
 	WorkerReplicas    int64              `json:"workerReplicas"`
 	WorkerCPU         string             `json:"workerCPU"`
@@ -485,7 +529,7 @@ func (mgr *KthenaMgr) listKthenaServices(
 	return services, nil
 }
 
-func (mgr *KthenaMgr) getKthenaService(c *gin.Context, admin bool, raw bool) {
+func (mgr *KthenaMgr) getKthenaService(c *gin.Context, admin, raw bool) {
 	obj, ok := mgr.loadKthenaService(c, admin)
 	if !ok {
 		return
@@ -528,6 +572,7 @@ func (mgr *KthenaMgr) deleteKthenaService(c *gin.Context, admin bool) {
 //	@Param			request	body		KthenaProxyReq	false	"OpenAI-compatible request body"
 //	@Success		200		{object}	any
 //	@Failure		400		{object}	resputil.Response[any]	"Request parameter error"
+//	@Failure		404		{object}	any				"Model route or runtime pod not found"
 //	@Failure		500		{object}	resputil.Response[any]	"Other errors"
 //	@Router			/v1/kthena/inference-services/{name}/openai/{path} [post]
 func (mgr *KthenaMgr) ProxyKthenaService(c *gin.Context) {
@@ -558,6 +603,13 @@ func (mgr *KthenaMgr) ProxyKthenaService(c *gin.Context) {
 	rawResp, err := mgr.proxyKthenaRouter(c.Request.Context(), c.Request.Method, targetPath, body, c.Request.Header)
 	if err != nil {
 		klog.Errorf("proxy inference request failed: %v", err)
+		// DoRaw preserves the router response body even for non-2xx responses.
+		// Return that status and body to the caller so errors such as missing
+		// runtime pods remain actionable instead of becoming a generic 500.
+		if len(rawResp) > 0 {
+			c.Data(kthenaProxyHTTPStatus(err), "application/json", rawResp)
+			return
+		}
 		resputil.HandleError(c, bizerr.Internal.K8sServiceError.Wrap(err, "proxy inference request failed"))
 		return
 	}
@@ -571,8 +623,11 @@ func (mgr *KthenaMgr) proxyKthenaRouter(
 	body []byte,
 	headers http.Header,
 ) ([]byte, error) {
+	if mgr.proxyKthenaRouterFn != nil {
+		return mgr.proxyKthenaRouterFn(ctx, method, targetPath, body, headers)
+	}
 	if mgr.kubeClient == nil {
-		return nil, fmt.Errorf("kubernetes client is not initialized")
+		return nil, bizerr.Internal.K8sServiceError.New("kubernetes client is not initialized")
 	}
 	req := mgr.kubeClient.CoreV1().RESTClient().
 		Verb(method).
@@ -596,6 +651,19 @@ func (mgr *KthenaMgr) proxyKthenaRouter(
 		req.Body(body)
 	}
 	return req.DoRaw(ctx)
+}
+
+func kthenaProxyHTTPStatus(err error) int {
+	type apiStatus interface {
+		Status() metav1.Status
+	}
+	if statusErr, ok := err.(apiStatus); ok {
+		statusCode := int(statusErr.Status().Code)
+		if statusCode >= http.StatusBadRequest && statusCode <= 599 {
+			return statusCode
+		}
+	}
+	return http.StatusBadGateway
 }
 
 func (mgr *KthenaMgr) loadKthenaService(c *gin.Context, admin bool) (*unstructured.Unstructured, bool) {
@@ -633,6 +701,7 @@ func canAccessKthenaService(c *gin.Context, obj *unstructured.Unstructured) bool
 		labels[inferenceServiceLabelAccountID] == strconv.FormatUint(uint64(token.AccountID), 10)
 }
 
+//nolint:gocyclo // Each field is normalized and validated in a fixed order so API clients receive precise errors.
 func validateCreateKthenaReq(ctx context.Context, req *CreateKthenaReq, token util.JWTMessage) error {
 	req.Name = strings.TrimSpace(req.Name)
 	req.ModelSource = strings.TrimSpace(req.ModelSource)
@@ -643,14 +712,16 @@ func validateCreateKthenaReq(ctx context.Context, req *CreateKthenaReq, token ut
 	req.Worker.Image = strings.TrimSpace(req.Worker.Image)
 
 	if !inferenceServiceNameRE.MatchString(req.Name) || len(req.Name) > 63 {
-		return fmt.Errorf("name must be a valid Kubernetes name with lowercase letters, digits, or hyphens")
+		return bizerr.BadRequest.ParameterError.New(
+			"name must be a valid Kubernetes name with lowercase letters, digits, or hyphens",
+		)
 	}
 	if req.ModelSource == "" {
 		req.ModelSource = inferenceModelSourcePlatform
 	}
 	if req.ModelSource == inferenceModelSourcePlatform {
 		if req.PlatformModelID == 0 {
-			return fmt.Errorf("platform model is required")
+			return bizerr.BadRequest.MissingParameter.New("platform model is required")
 		}
 		dataset, err := loadAccessibleModelDataset(ctx, req.PlatformModelID, token)
 		if err != nil {
@@ -662,49 +733,58 @@ func validateCreateKthenaReq(ctx context.Context, req *CreateKthenaReq, token ut
 		}
 		req.CacheURI = datasetModelCacheURI()
 	} else if req.ModelSource != inferenceModelSourceExternal {
-		return fmt.Errorf("modelSource must be platform or external")
+		return bizerr.BadRequest.ParameterError.New("modelSource must be platform or external")
 	}
 	if req.ModelURI == "" {
-		return fmt.Errorf("modelURI is required")
+		return bizerr.BadRequest.MissingParameter.New("modelURI is required")
 	}
 	if !strings.HasPrefix(req.ModelURI, "hf://") &&
 		!strings.HasPrefix(req.ModelURI, "s3://") &&
 		!strings.HasPrefix(req.ModelURI, "pvc://") &&
 		!strings.HasPrefix(req.ModelURI, "ms://") {
-		return fmt.Errorf("modelURI must start with hf://, s3://, pvc://, or ms://")
+		return bizerr.BadRequest.ParameterError.New("modelURI must start with hf://, s3://, pvc://, or ms://")
 	}
 	if req.BackendType == "" {
-		req.BackendType = "vLLM"
+		req.BackendType = kthenaBackendVLLM
 	}
 	if req.CacheURI == "" {
-		req.CacheURI = "hostpath:///tmp/cache"
+		req.CacheURI = kthenaDefaultCacheURI
 	}
 	if !strings.HasPrefix(req.CacheURI, "hostpath://") && !strings.HasPrefix(req.CacheURI, "pvc://") {
-		return fmt.Errorf("cacheURI must start with hostpath:// or pvc://")
+		return bizerr.BadRequest.ParameterError.New("cacheURI must start with hostpath:// or pvc://")
 	}
-	if req.MinReplicas <= 0 {
-		req.MinReplicas = 1
+	if req.BackendType != kthenaBackendVLLM {
+		// Kthena v1.0.0's published CRD accepts vLLM and
+		// vLLMDisaggregated. CreateKthenaReq represents a single server worker,
+		// so only the non-disaggregated vLLM shape can be generated here.
+		return bizerr.BadRequest.ParameterError.New("backendType must be vLLM for Kthena v1.0.0")
 	}
-	if req.MaxReplicas <= 0 {
-		req.MaxReplicas = req.MinReplicas
+	if req.Replicas <= 0 {
+		req.Replicas = 1
 	}
-	if req.MaxReplicas < req.MinReplicas {
-		return fmt.Errorf("maxReplicas must be greater than or equal to minReplicas")
+	if req.Replicas > kthenaMaxReplicas {
+		return bizerr.BadRequest.ParameterError.New("replicas cannot exceed 1000000")
 	}
 	if req.Worker.Image == "" {
-		return fmt.Errorf("worker.image is required")
+		return bizerr.BadRequest.MissingParameter.New("worker.image is required")
 	}
 	if req.Worker.Replicas <= 0 {
 		req.Worker.Replicas = 1
 	}
+	if req.Worker.Replicas > kthenaMaxReplicas {
+		return bizerr.BadRequest.ParameterError.New("worker.replicas cannot exceed 1000000")
+	}
 	if req.Worker.Pods <= 0 {
 		req.Worker.Pods = 1
+	}
+	if req.Worker.Pods > kthenaMaxReplicas {
+		return bizerr.BadRequest.ParameterError.New("worker.pods cannot exceed 1000000")
 	}
 	if req.Worker.CPU == "" {
 		req.Worker.CPU = "2"
 	}
 	if req.Worker.Memory == "" {
-		req.Worker.Memory = "4Gi"
+		req.Worker.Memory = kthenaDefaultWorkerMemory
 	}
 	if req.Worker.Config == nil {
 		req.Worker.Config = map[string]string{}
@@ -735,17 +815,17 @@ func buildModelBoosterObject(req *CreateKthenaReq, token util.JWTMessage, namesp
 
 	env := make([]any, 0, len(req.Env))
 	for name, value := range req.Env {
-		env = append(env, map[string]any{"name": name, "value": value})
+		env = append(env, map[string]any{"name": name, kthenaEnvValueKey: value})
 	}
 
 	resources := map[string]any{
 		"requests": map[string]any{
-			"cpu":    req.Worker.CPU,
-			"memory": req.Worker.Memory,
+			kthenaResourceCPUKey:    req.Worker.CPU,
+			kthenaResourceMemoryKey: req.Worker.Memory,
 		},
 		"limits": map[string]any{
-			"cpu":    req.Worker.CPU,
-			"memory": req.Worker.Memory,
+			kthenaResourceCPUKey:    req.Worker.CPU,
+			kthenaResourceMemoryKey: req.Worker.Memory,
 		},
 	}
 	if strings.TrimSpace(req.Worker.GPU) != "" && req.Worker.GPU != "0" {
@@ -761,6 +841,21 @@ func buildModelBoosterObject(req *CreateKthenaReq, token util.JWTMessage, namesp
 		workerConfig[key] = value
 	}
 
+	worker := map[string]any{
+		kthenaSpecTypeKey: "server",
+		"image":           req.Worker.Image,
+		"replicas":        req.Worker.Replicas,
+		"pods":            req.Worker.Pods,
+		"config":          workerConfig,
+		"resources":       resources,
+	}
+	if affinity := buildWorkerAffinity(req.Selectors); affinity != nil {
+		worker["affinity"] = affinity
+	}
+	if len(req.Tolerations) > 0 {
+		worker["tolerations"] = req.Tolerations
+	}
+
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(modelBoosterGVK)
 	obj.SetName(req.Name)
@@ -769,30 +864,15 @@ func buildModelBoosterObject(req *CreateKthenaReq, token util.JWTMessage, namesp
 	obj.SetAnnotations(annotations)
 	obj.Object["spec"] = map[string]any{
 		"backend": map[string]any{
-			"name":          "backend1",
-			"type":          req.BackendType,
-			"modelURI":      req.ModelURI,
-			"cacheURI":      req.CacheURI,
-			"minReplicas":   req.MinReplicas,
-			"maxReplicas":   req.MaxReplicas,
-			"schedulerName": kthenaSchedulerName,
-			"env":           env,
-			"workers": []any{
-				map[string]any{
-					"type":      "server",
-					"image":     req.Worker.Image,
-					"replicas":  req.Worker.Replicas,
-					"pods":      req.Worker.Pods,
-					"config":    workerConfig,
-					"resources": resources,
-					"affinity":  buildWorkerAffinity(req.Selectors),
-				},
-			},
+			"name":            "backend1",
+			kthenaSpecTypeKey: req.BackendType,
+			"modelURI":        req.ModelURI,
+			"cacheURI":        req.CacheURI,
+			"replicas":        req.Replicas,
+			"schedulerName":   kthenaSchedulerName,
+			"env":             env,
+			"workers":         []any{worker},
 		},
-	}
-	if len(req.Tolerations) > 0 {
-		worker := obj.Object["spec"].(map[string]any)["backend"].(map[string]any)["workers"].([]any)[0].(map[string]any)
-		worker["tolerations"] = req.Tolerations
 	}
 	return obj
 }
@@ -803,7 +883,7 @@ func (mgr *KthenaMgr) modelBoosterToResp(
 ) (*KthenaServiceResp, error) {
 	backend, ok, err := unstructured.NestedMap(obj.Object, "spec", "backend")
 	if err != nil || !ok {
-		return nil, fmt.Errorf("spec.backend is missing")
+		return nil, bizerr.Internal.K8sServiceError.New("spec.backend is missing")
 	}
 
 	workers, _, _ := unstructured.NestedSlice(obj.Object, "spec", "backend", "workers")
@@ -829,27 +909,38 @@ func (mgr *KthenaMgr) modelBoosterToResp(
 
 	resources := mgr.relatedKthenaResources(ctx, obj, servedModel)
 	runtimePods := mgr.relatedKthenaRuntimePods(ctx, resources)
-	access := mgr.buildKthenaAccess(ctx, obj, servedModel, resources)
-	diagnostics := mgr.relatedKthenaDiagnostics(ctx, obj, resources)
-	if phase == "Pending" {
+	access := mgr.buildKthenaAccess(ctx, obj, resources)
+	diagnostics := mgr.relatedKthenaDiagnostics(ctx, resources)
+	if phase == kthenaPhasePending {
 		phase = aggregateInferencePhase(conditions, resources)
 	}
+	phase = runtimeAwareInferencePhase(phase, resources, runtimePods)
+	if phase == kthenaPhaseDegraded && !hasReadyRuntimePod(runtimePods) {
+		diagnostics = append(diagnostics, KthenaDiagnostic{
+			Level:    kthenaDiagnosticLevelWarning,
+			Reason:   "RuntimePodsUnavailable",
+			Message:  kthenaKindModelServing + " reports ready, but no ready runtime pod was found",
+			Resource: kthenaKindModelBooster + "/" + obj.GetNamespace() + "/" + obj.GetName(),
+		})
+	}
+	owner, userInfo := kthenaServiceOwner(obj)
 
 	return &KthenaServiceResp{
 		Name:              obj.GetName(),
 		Namespace:         obj.GetNamespace(),
+		Owner:             owner,
+		UserInfo:          userInfo,
 		ModelSource:       modelSourceFromObject(obj),
 		PlatformModelID:   platformModelIDFromObject(obj),
 		ModelURI:          stringValue(backend["modelURI"]),
 		ServedModel:       servedModel,
-		BackendType:       stringValue(backend["type"]),
+		BackendType:       stringValue(backend[kthenaSpecTypeKey]),
 		CacheURI:          stringValue(backend["cacheURI"]),
-		MinReplicas:       int64Value(backend["minReplicas"]),
-		MaxReplicas:       int64Value(backend["maxReplicas"]),
+		Replicas:          int64Value(backend["replicas"]),
 		WorkerImage:       stringValue(worker["image"]),
 		WorkerReplicas:    int64Value(worker["replicas"]),
-		WorkerCPU:         nestedResourceValue(worker, "cpu"),
-		WorkerMemory:      nestedResourceValue(worker, "memory"),
+		WorkerCPU:         nestedResourceValue(worker, kthenaResourceCPUKey),
+		WorkerMemory:      nestedResourceValue(worker, kthenaResourceMemoryKey),
 		WorkerGPU:         firstGPUResourceValue(worker),
 		WorkerGPUModel:    firstGPUResourceName(worker),
 		Env:               envMap,
@@ -865,16 +956,28 @@ func (mgr *KthenaMgr) modelBoosterToResp(
 	}, nil
 }
 
+// kthenaServiceOwner reads the creator identity persisted on the ModelBooster
+// at creation time. Keeping this data on the Kubernetes object lets a list
+// response expose UserInfo without an additional database lookup for each
+// deployment.
+func kthenaServiceOwner(obj *unstructured.Unstructured) (string, model.UserInfo) {
+	if obj == nil {
+		return "", model.UserInfo{}
+	}
+	username := strings.TrimSpace(obj.GetAnnotations()[inferenceServiceAnnotationUsername])
+	return username, model.UserInfo{Username: username}
+}
+
 func (mgr *KthenaMgr) relatedKthenaResources(
 	ctx context.Context,
 	booster *unstructured.Unstructured,
 	servedModel string,
 ) []KthenaResource {
-	resources := make([]KthenaResource, 0, 4)
-	resources = append(resources, kthenaResourceFromObject("ModelBooster", booster))
-	resources = append(resources, mgr.listRelatedResources(ctx, modelServingListGVK, "ModelServing", booster, servedModel)...)
-	resources = append(resources, mgr.listRelatedResources(ctx, modelServerListGVK, "ModelServer", booster, servedModel)...)
-	resources = append(resources, mgr.listRelatedResources(ctx, modelRouteListGVK, "ModelRoute", booster, servedModel)...)
+	resources := make([]KthenaResource, 0, kthenaRelatedResourceCapacity)
+	resources = append(resources, kthenaResourceFromObject(kthenaKindModelBooster, booster))
+	resources = append(resources, mgr.listRelatedResources(ctx, modelServingListGVK, kthenaKindModelServing, booster, servedModel)...)
+	resources = append(resources, mgr.listRelatedResources(ctx, modelServerListGVK, kthenaKindModelServer, booster, servedModel)...)
+	resources = append(resources, mgr.listRelatedResources(ctx, modelRouteListGVK, kthenaKindModelRoute, booster, servedModel)...)
 	return resources
 }
 
@@ -888,7 +991,13 @@ func (mgr *KthenaMgr) listRelatedResources(
 	list := &unstructured.UnstructuredList{}
 	list.SetGroupVersionKind(gvk)
 	if err := mgr.client.List(ctx, list, client.InNamespace(booster.GetNamespace())); err != nil {
-		klog.V(4).Infof("list %s for inference service %s/%s failed: %v", kind, booster.GetNamespace(), booster.GetName(), err)
+		klog.V(kthenaLogVerbosity).Infof(
+			"list %s for inference service %s/%s failed: %v",
+			kind,
+			booster.GetNamespace(),
+			booster.GetName(),
+			err,
+		)
 		return nil
 	}
 	resources := make([]KthenaResource, 0, len(list.Items))
@@ -902,7 +1011,6 @@ func (mgr *KthenaMgr) listRelatedResources(
 
 func (mgr *KthenaMgr) relatedKthenaDiagnostics(
 	ctx context.Context,
-	booster *unstructured.Unstructured,
 	resources []KthenaResource,
 ) []KthenaDiagnostic {
 	if mgr.kubeClient == nil {
@@ -911,14 +1019,20 @@ func (mgr *KthenaMgr) relatedKthenaDiagnostics(
 	seen := map[string]struct{}{}
 	diagnostics := make([]KthenaDiagnostic, 0)
 	for _, resource := range resources {
-		if resource.Kind != "ModelServing" {
+		if resource.Kind != kthenaKindModelServing {
 			continue
 		}
 		pods, err := mgr.kubeClient.CoreV1().Pods(resource.Namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("modelserving.volcano.sh/name=%s", resource.Name),
 		})
 		if err != nil {
-			klog.V(4).Infof("list pods for kthena ModelServing %s/%s failed: %v", resource.Namespace, resource.Name, err)
+			klog.V(kthenaLogVerbosity).Infof(
+				"list pods for kthena %s %s/%s failed: %v",
+				kthenaKindModelServing,
+				resource.Namespace,
+				resource.Name,
+				err,
+			)
 			continue
 		}
 		for i := range pods.Items {
@@ -941,8 +1055,8 @@ func (mgr *KthenaMgr) relatedKthenaDiagnostics(
 	sort.SliceStable(diagnostics, func(i, j int) bool {
 		return diagnostics[i].Timestamp.After(diagnostics[j].Timestamp)
 	})
-	if len(diagnostics) > 10 {
-		return diagnostics[:10]
+	if len(diagnostics) > kthenaMaxDiagnostics {
+		return diagnostics[:kthenaMaxDiagnostics]
 	}
 	return diagnostics
 }
@@ -957,14 +1071,20 @@ func (mgr *KthenaMgr) relatedKthenaRuntimePods(
 	seen := map[string]struct{}{}
 	runtimePods := make([]KthenaRuntimePod, 0)
 	for _, resource := range resources {
-		if resource.Kind != "ModelServing" {
+		if resource.Kind != kthenaKindModelServing {
 			continue
 		}
 		pods, err := mgr.kubeClient.CoreV1().Pods(resource.Namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("modelserving.volcano.sh/name=%s", resource.Name),
 		})
 		if err != nil {
-			klog.V(4).Infof("list pods for kthena ModelServing %s/%s failed: %v", resource.Namespace, resource.Name, err)
+			klog.V(kthenaLogVerbosity).Infof(
+				"list pods for kthena %s %s/%s failed: %v",
+				kthenaKindModelServing,
+				resource.Namespace,
+				resource.Name,
+				err,
+			)
 			continue
 		}
 		for i := range pods.Items {
@@ -1035,7 +1155,7 @@ func (mgr *KthenaMgr) diagnosticsFromPod(ctx context.Context, pod *corev1.Pod) [
 				continue
 			}
 			diagnostics = append(diagnostics, KthenaDiagnostic{
-				Level:     "warning",
+				Level:     kthenaDiagnosticLevelWarning,
 				Reason:    nonEmpty(condition.Reason, "PodSchedulingFailed"),
 				Message:   condition.Message,
 				Resource:  resource,
@@ -1075,7 +1195,7 @@ func diagnosticsFromContainerStatus(
 	}
 	if waiting := status.State.Waiting; waiting != nil {
 		return []KthenaDiagnostic{{
-			Level:     "warning",
+			Level:     kthenaDiagnosticLevelWarning,
 			Reason:    nonEmpty(waiting.Reason, reasonPrefix+"Waiting"),
 			Message:   nonEmpty(waiting.Message, fmt.Sprintf("%s %q is waiting", containerKind, status.Name)),
 			Details:   logTail,
@@ -1130,7 +1250,7 @@ func (mgr *KthenaMgr) readContainerLogTail(
 	container string,
 	previous bool,
 ) string {
-	tailLines := int64(80)
+	tailLines := kthenaDefaultLogTailLines
 	req := mgr.kubeClient.CoreV1().Pods(namespace).GetLogs(pod, &corev1.PodLogOptions{
 		Container: container,
 		Previous:  previous,
@@ -1138,17 +1258,36 @@ func (mgr *KthenaMgr) readContainerLogTail(
 	})
 	stream, err := req.Stream(ctx)
 	if err != nil {
-		klog.V(4).Infof("read logs for kthena pod %s/%s container %s previous=%t failed: %v", namespace, pod, container, previous, err)
+		klog.V(kthenaLogVerbosity).Infof(
+			"read logs for kthena pod %s/%s container %s previous=%t failed: %v",
+			namespace,
+			pod,
+			container,
+			previous,
+			err,
+		)
 		return ""
 	}
 	defer func() {
 		if closeErr := stream.Close(); closeErr != nil {
-			klog.V(4).Infof("close log stream for kthena pod %s/%s container %s failed: %v", namespace, pod, container, closeErr)
+			klog.V(kthenaLogVerbosity).Infof(
+				"close log stream for kthena pod %s/%s container %s failed: %v",
+				namespace,
+				pod,
+				container,
+				closeErr,
+			)
 		}
 	}()
 	data, err := io.ReadAll(stream)
 	if err != nil {
-		klog.V(4).Infof("read log stream for kthena pod %s/%s container %s failed: %v", namespace, pod, container, err)
+		klog.V(kthenaLogVerbosity).Infof(
+			"read log stream for kthena pod %s/%s container %s failed: %v",
+			namespace,
+			pod,
+			container,
+			err,
+		)
 		return ""
 	}
 	return strings.TrimSpace(string(data))
@@ -1159,17 +1298,23 @@ func (mgr *KthenaMgr) diagnosticsFromPodEvents(ctx context.Context, pod *corev1.
 		FieldSelector: fmt.Sprintf("involvedObject.name=%s", pod.Name),
 	})
 	if err != nil {
-		klog.V(4).Infof("list events for kthena pod %s/%s failed: %v", pod.Namespace, pod.Name, err)
+		klog.V(kthenaLogVerbosity).Infof("list events for kthena pod %s/%s failed: %v", pod.Namespace, pod.Name, err)
 		return nil
 	}
 	diagnostics := make([]KthenaDiagnostic, 0, len(events.Items))
 	for i := range events.Items {
 		event := &events.Items[i]
+		// Pod names are reused when a ModelBooster is recreated. Events from a
+		// previous pod with the same name can remain in the namespace and must
+		// not make the replacement deployment appear unhealthy.
+		if event.InvolvedObject.UID != pod.UID {
+			continue
+		}
 		if event.Type != corev1.EventTypeWarning {
 			continue
 		}
 		diagnostics = append(diagnostics, KthenaDiagnostic{
-			Level:     "warning",
+			Level:     kthenaDiagnosticLevelWarning,
 			Reason:    nonEmpty(event.Reason, "PodWarning"),
 			Message:   event.Message,
 			Resource:  "Pod/" + pod.Namespace + "/" + pod.Name,
@@ -1191,7 +1336,7 @@ func isRelatedKthenaObject(obj, booster *unstructured.Unstructured, servedModel 
 		return true
 	}
 	for _, owner := range obj.GetOwnerReferences() {
-		if owner.Kind == "ModelBooster" && owner.Name == boosterName {
+		if owner.Kind == kthenaKindModelBooster && owner.Name == boosterName {
 			return true
 		}
 	}
@@ -1217,7 +1362,7 @@ func kthenaResourceFromObject(kind string, obj *unstructured.Unstructured) Kthen
 		Name:       obj.GetName(),
 		Namespace:  obj.GetNamespace(),
 		Phase:      phase,
-		Ready:      phase == "Ready" || phase == "Active",
+		Ready:      phase == kthenaPhaseReady || phase == kthenaPhaseActive,
 		Conditions: conditions,
 	}
 }
@@ -1225,7 +1370,6 @@ func kthenaResourceFromObject(kind string, obj *unstructured.Unstructured) Kthen
 func (mgr *KthenaMgr) buildKthenaAccess(
 	ctx context.Context,
 	booster *unstructured.Unstructured,
-	servedModel string,
 	resources []KthenaResource,
 ) KthenaAccess {
 	access := KthenaAccess{
@@ -1236,9 +1380,9 @@ func (mgr *KthenaMgr) buildKthenaAccess(
 	}
 	for _, resource := range resources {
 		switch resource.Kind {
-		case "ModelRoute":
+		case kthenaKindModelRoute:
 			access.RouteName = resource.Name
-		case "ModelServer":
+		case kthenaKindModelServer:
 			access.ServerName = resource.Name
 		}
 	}
@@ -1251,23 +1395,53 @@ func (mgr *KthenaMgr) buildKthenaAccess(
 }
 
 func aggregateInferencePhase(conditions []map[string]any, resources []KthenaResource) string {
-	if conditionPhase(conditions) == "Ready" {
-		return "Ready"
+	if conditionPhase(conditions) == kthenaPhaseReady {
+		return kthenaPhaseReady
 	}
 	hasRelated := false
 	for _, resource := range resources {
-		if resource.Kind == "ModelBooster" {
+		if resource.Kind == kthenaKindModelBooster {
 			continue
 		}
 		hasRelated = true
 		if !resource.Ready {
-			return "Progressing"
+			return kthenaPhaseProgressing
 		}
 	}
 	if hasRelated {
-		return "Ready"
+		return kthenaPhaseReady
 	}
-	return "Pending"
+	return kthenaPhasePending
+}
+
+func runtimeAwareInferencePhase(
+	phase string,
+	resources []KthenaResource,
+	runtimePods []KthenaRuntimePod,
+) string {
+	if phase != kthenaPhaseReady && phase != kthenaPhaseActive {
+		return phase
+	}
+	hasModelServing := false
+	for _, resource := range resources {
+		if resource.Kind == kthenaKindModelServing {
+			hasModelServing = true
+			break
+		}
+	}
+	if hasModelServing && !hasReadyRuntimePod(runtimePods) {
+		return kthenaPhaseDegraded
+	}
+	return phase
+}
+
+func hasReadyRuntimePod(runtimePods []KthenaRuntimePod) bool {
+	for _, pod := range runtimePods {
+		if pod.Ready {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeConditions(obj *unstructured.Unstructured) ([]map[string]any, error) {
@@ -1286,21 +1460,21 @@ func normalizeConditions(obj *unstructured.Unstructured) ([]map[string]any, erro
 
 func conditionPhase(conditions []map[string]any) string {
 	for _, condition := range conditions {
-		if stringValue(condition["type"]) == "Active" && stringValue(condition["status"]) == "True" {
-			return "Ready"
+		if stringValue(condition[kthenaSpecTypeKey]) == kthenaPhaseActive && stringValue(condition["status"]) == "True" {
+			return kthenaPhaseReady
 		}
 	}
 	if len(conditions) > 0 {
-		return "Progressing"
+		return kthenaPhaseProgressing
 	}
-	return "Pending"
+	return kthenaPhasePending
 }
 
 func loadAccessibleModelDataset(ctx context.Context, datasetID uint, token util.JWTMessage) (*model.Dataset, error) {
 	d := query.Dataset
 	dataset, err := d.WithContext(ctx).Where(d.ID.Eq(datasetID), d.Type.Eq(string(model.DataTypeModel))).First()
 	if err != nil {
-		return nil, fmt.Errorf("selected platform model was not found")
+		return nil, bizerr.NotFound.DataBaseNotFound.New("selected platform model was not found")
 	}
 	if dataset.UserID == token.UserID {
 		return dataset, nil
@@ -1313,7 +1487,7 @@ func loadAccessibleModelDataset(ctx context.Context, datasetID uint, token util.
 	if _, err := qd.WithContext(ctx).Where(qd.AccountID.Eq(token.AccountID), qd.DatasetID.Eq(datasetID)).First(); err == nil {
 		return dataset, nil
 	}
-	return nil, fmt.Errorf("you do not have permission to use the selected platform model")
+	return nil, bizerr.Forbidden.PermissionDenied.New("you do not have permission to use the selected platform model")
 }
 
 func datasetToKthenaModelURI(dataset *model.Dataset) string {
@@ -1327,7 +1501,7 @@ func datasetToKthenaModelURI(dataset *model.Dataset) string {
 func datasetModelCacheURI() string {
 	pvcName := strings.TrimSpace(config.GetConfig().Storage.PVC.ReadWriteMany)
 	if pvcName == "" {
-		return "hostpath:///tmp/cache"
+		return kthenaDefaultCacheURI
 	}
 	return "pvc://" + pvcName
 }
@@ -1377,7 +1551,7 @@ func stringValue(value any) string {
 	return fmt.Sprint(value)
 }
 
-func nonEmpty(value string, fallback string) string {
+func nonEmpty(value, fallback string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return fallback
@@ -1448,7 +1622,7 @@ func envSliceToMap(value any) map[string]string {
 		if name == "" {
 			continue
 		}
-		env[name] = stringValue(m["value"])
+		env[name] = stringValue(m[kthenaEnvValueKey])
 	}
 	return env
 }
@@ -1467,7 +1641,7 @@ func firstGPUResourceName(worker map[string]any) string {
 		return ""
 	}
 	for key := range limits {
-		if key != "cpu" && key != "memory" {
+		if key != kthenaResourceCPUKey && key != kthenaResourceMemoryKey {
 			return key
 		}
 	}
@@ -1482,16 +1656,16 @@ func firstGPUResourceValue(worker map[string]any) string {
 	return nestedResourceValue(worker, name)
 }
 
-func withDefaultModel(body []byte, model string) ([]byte, error) {
-	if len(bytes.TrimSpace(body)) == 0 || strings.TrimSpace(model) == "" {
+func withDefaultModel(body []byte, modelName string) ([]byte, error) {
+	if len(bytes.TrimSpace(body)) == 0 || strings.TrimSpace(modelName) == "" {
 		return body, nil
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("request body must be valid JSON")
+		return nil, bizerr.BadRequest.InvalidRequest.New("request body must be valid JSON")
 	}
 	if strings.TrimSpace(stringValue(payload["model"])) == "" {
-		payload["model"] = model
+		payload["model"] = modelName
 	}
 	return json.Marshal(payload)
 }

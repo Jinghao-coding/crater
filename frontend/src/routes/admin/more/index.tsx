@@ -14,6 +14,7 @@ import WarningAlert from '@/components/custom/warning-alert'
 import {
   apiAdminGetBillingStatus,
   apiAdminGetGpuAnalysisStatus,
+  apiAdminGetKthenaInferenceStatus,
   apiAdminGetLLMConfig,
   apiAdminGetModelDownloadLimitConfig,
   apiAdminGetPodBandwidthConfig,
@@ -23,6 +24,7 @@ import {
   apiAdminResetLLMConfig,
   apiAdminSetBillingStatus,
   apiAdminSetGpuAnalysisStatus,
+  apiAdminSetKthenaInferenceStatus,
   apiAdminUpdateLLMConfig,
   apiAdminUpdateModelDownloadLimitConfig,
   apiAdminUpdatePodBandwidthConfig,
@@ -37,6 +39,7 @@ import { showErrorToast } from '@/utils/toast'
 import { BasicSettings } from './-components/basic-settings'
 import { BillingSettings } from './-components/billing-settings'
 import { GpuAnalysis } from './-components/gpu-analysis'
+import { KthenaInferenceSettings } from './-components/kthena-inference-settings'
 import { LlmFormSchema, LlmSettings, createLlmSettingsSchema } from './-components/llm-settings'
 import { ModelDownloadLimitSettings } from './-components/model-download-limit-settings'
 import { PodBandwidthSettings } from './-components/pod-bandwidth-settings'
@@ -71,6 +74,11 @@ function RouteComponent() {
   const { data: gpuStatusData } = useQuery({
     queryKey: ['admin', 'system-config', 'gpu-status'],
     queryFn: () => apiAdminGetGpuAnalysisStatus().then((res) => res.data),
+  })
+
+  const { data: kthenaInferenceStatusData } = useQuery({
+    queryKey: ['admin', 'system-config', 'kthena-inference'],
+    queryFn: () => apiAdminGetKthenaInferenceStatus().then((res) => res.data),
   })
 
   const { data: prequeueConfigData } = useQuery({
@@ -189,6 +197,28 @@ function RouteComponent() {
     onError: handleError,
   })
 
+  const toggleKthenaInferenceMutation = useMutation({
+    mutationFn: apiAdminSetKthenaInferenceStatus,
+    onSuccess: async (_data, enabled) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['admin', 'system-config', 'kthena-inference'],
+        }),
+        queryClient.invalidateQueries({ queryKey: ['system-config', 'kthena-inference'] }),
+      ])
+      toast.success(
+        enabled
+          ? t('systemConfig.kthenaInference.enabledSuccess', {
+              defaultValue: '模型部署已开启',
+            })
+          : t('systemConfig.kthenaInference.disabledSuccess', {
+              defaultValue: '模型部署已关闭',
+            })
+      )
+    },
+    onError: showErrorToast,
+  })
+
   const updateBillingMutation = useMutation({
     mutationFn: apiAdminSetBillingStatus,
     onSuccess: () => {
@@ -262,6 +292,10 @@ function RouteComponent() {
     } else {
       toggleGpuMutation.mutate(false)
     }
+  }
+
+  const handleKthenaInferenceToggle = (checked: boolean) => {
+    toggleKthenaInferenceMutation.mutate(checked)
   }
 
   const buildPrequeuePayload = () => ({
@@ -358,6 +392,14 @@ function RouteComponent() {
           enabled={gpuStatusData?.enabled || false}
           isPending={toggleGpuMutation.isPending || updateLLMMutation.isPending}
           onToggle={handleGpuToggle}
+        />
+      </Card>
+
+      <Card>
+        <KthenaInferenceSettings
+          enabled={kthenaInferenceStatusData?.enabled ?? false}
+          isPending={toggleKthenaInferenceMutation.isPending}
+          onToggle={handleKthenaInferenceToggle}
         />
       </Card>
 

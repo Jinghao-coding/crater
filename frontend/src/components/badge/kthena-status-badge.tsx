@@ -28,11 +28,22 @@ const hasProblemDiagnostics = (service: KthenaService) =>
     )
   }) ?? false
 
+const hasErrorDiagnostics = (service: KthenaService) =>
+  service.diagnostics?.some((diagnostic) => diagnostic.level === 'error') ?? false
+
 export const getKthenaDisplayState = (service: KthenaService): KthenaDisplayState => {
   const phase = service.phase || 'Pending'
   if (phase === 'Failed') return 'failed'
+  if (phase === 'Degraded') return 'degraded'
+  // Kubernetes Warning events are historical and can remain attached to a pod
+  // after it becomes ready. Keep them in diagnostics, but don't let a
+  // transient readiness failure override Kthena's current Ready/Active phase.
+  // A live error diagnostic still takes precedence so real runtime failures
+  // remain visible in the header.
+  if (phase === 'Ready' || phase === 'Active') {
+    return hasErrorDiagnostics(service) ? 'degraded' : 'running'
+  }
   if (hasProblemDiagnostics(service)) return 'degraded'
-  if (phase === 'Ready' || phase === 'Active') return 'running'
   if (phase === 'Pending') return service.resources?.length ? 'scheduling' : 'submitted'
   return 'deploying'
 }
@@ -60,7 +71,7 @@ export const getKthenaStatusLabel = (state: KthenaDisplayState): PhaseBadgeData 
     case 'running':
       return {
         label: t('kthena.state.running'),
-        color: 'bg-highlight-emerald/20 text-highlight-emerald',
+        color: 'bg-highlight-blue/20 text-highlight-blue',
         description: t('kthena.stateDescription.running'),
       }
     case 'degraded':
