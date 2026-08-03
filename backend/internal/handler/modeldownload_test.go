@@ -247,6 +247,35 @@ func TestModelScopeDownloadCommandUsesArgumentArray(t *testing.T) {
 	}
 }
 
+func TestHuggingFaceDownloadCommandKeepsPaginationOnConfiguredEndpoint(t *testing.T) {
+	download := &model.ModelDownload{
+		Name:     "chloechia/loveda",
+		Source:   model.ModelSourceHuggingFace,
+		Category: model.DownloadCategoryDataset,
+	}
+
+	command := (&ModelDownloadMgr{}).buildDownloadCommand(download, "loveda")
+
+	for _, expected := range []string{
+		"from huggingface_hub.utils import _pagination",
+		`mirror = os.environ.get("HF_ENDPOINT", "https://huggingface.co").rstrip("/")`,
+		`url.startswith(upstream + "/")`,
+		`return mirror + url[len(upstream):]`,
+		"_pagination._get_next_page = get_next_page_via_configured_endpoint",
+		"[PAGINATION] rewriting next-page URL to configured Hugging Face endpoint",
+		`"repo_type": repo_type`,
+	} {
+		if !strings.Contains(command, expected) {
+			t.Fatalf("download command does not contain %q", expected)
+		}
+	}
+	for _, deprecated := range []string{"local_dir_use_symlinks", "resume_download"} {
+		if strings.Contains(command, deprecated) {
+			t.Fatalf("download command still contains deprecated argument %q", deprecated)
+		}
+	}
+}
+
 func TestShouldDisableHuggingFaceXet(t *testing.T) {
 	for _, testCase := range []struct {
 		name     string

@@ -1520,17 +1520,33 @@ python -c 'import huggingface_hub; print("[TOOLS] huggingface_hub=" + huggingfac
 python - << 'PY'
 import os
 from huggingface_hub import snapshot_download
+from huggingface_hub.utils import _pagination
 
 repo_id = %q
 revision = %q
 repo_type = %q
 
+# Some Hub mirrors return an absolute Link header whose rel="next" URL points to huggingface.co.
+# header for paginated repository trees. Respect the configured endpoint for
+# those next-page requests as well, otherwise large repositories unexpectedly
+# bypass the mirror after the first 1,000 entries.
+mirror = os.environ.get("HF_ENDPOINT", "https://huggingface.co").rstrip("/")
+upstream = "https://huggingface.co"
+original_get_next_page = _pagination._get_next_page
+
+def get_next_page_via_configured_endpoint(response):
+    url = original_get_next_page(response)
+    if mirror != upstream and url and url.startswith(upstream + "/"):
+        print("[PAGINATION] rewriting next-page URL to configured Hugging Face endpoint", flush=True)
+        return mirror + url[len(upstream):]
+    return url
+
+_pagination._get_next_page = get_next_page_via_configured_endpoint
+
 kwargs = {
     "repo_id": repo_id,
     "repo_type": repo_type,
     "local_dir": os.environ["OUT_DIR"],
-    "local_dir_use_symlinks": False,
-    "resume_download": True,
 }
 if revision:
     kwargs["revision"] = revision
