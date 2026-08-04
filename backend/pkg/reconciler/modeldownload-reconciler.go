@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-logr/logr"
 	"gorm.io/datatypes"
@@ -202,6 +203,8 @@ func (r *ModelDownloadReconciler) syncDownloadWithJob(
 		}
 	}
 
+	retryFinalLogs := r.ensureFinalLogs(ctx, job, download, newStatus)
+
 	if newStatus != oldStatus {
 		if err := r.updateDownloadStatus(ctx, download, newStatus); err != nil {
 			logger.Error(err, "failed to update download status")
@@ -210,6 +213,9 @@ func (r *ModelDownloadReconciler) syncDownloadWithJob(
 		logger.Info(fmt.Sprintf("model download: %s, status: %s -> %s", job.Name, oldStatus, newStatus))
 	}
 	if newStatus == model.ModelDownloadStatusDownloading {
+		return ctrl.Result{RequeueAfter: progressRequeueInterval}, nil
+	}
+	if retryFinalLogs {
 		return ctrl.Result{RequeueAfter: progressRequeueInterval}, nil
 	}
 
@@ -625,24 +631,74 @@ func (r *ModelDownloadReconciler) persistFinalLogs(ctx context.Context, job *bat
 		return ""
 	}
 
+	storedLogs := truncateLogTail(logs, maxStoredLogBytes)
 	now := time.Now()
 	q := query.ModelDownload
 	if _, err := q.WithContext(ctx).Where(q.ID.Eq(download.ID)).Updates(map[string]any{
-		"logs":          truncateLogTail(logs, maxStoredLogBytes),
+		"logs":          storedLogs,
 		"logs_saved_at": now,
 	}); err != nil {
 		klog.Warningf("failed to persist final logs for download %d: %v", download.ID, err)
+	} else {
+		download.Logs = storedLogs
+		download.LogsSavedAt = &now
 	}
 	return logs
+}
+
+// ensureFinalLogs retries terminal log persistence after transient failures,
+// including after a controller restart when there is no status transition.
+func (r *ModelDownloadReconciler) ensureFinalLogs(
+	ctx context.Context, job *batchv1.Job, download *model.ModelDownload, status model.ModelDownloadStatus,
+) bool {
+	if status != model.ModelDownloadStatusReady && status != model.ModelDownloadStatusFailed {
+		return false
+	}
+	if finalLogsAreCurrent(job, download, status) {
+		return false
+	}
+	r.persistFinalLogs(ctx, job, download)
+	return !finalLogsAreCurrent(job, download, status)
+}
+
+// finalLogsAreCurrent distinguishes a terminal log snapshot from the periodic
+// progress snapshots written while the pod is running.
+func finalLogsAreCurrent(job *batchv1.Job, download *model.ModelDownload, status model.ModelDownloadStatus) bool {
+	if download.LogsSavedAt == nil {
+		return false
+	}
+	if terminalTime := terminalJobTime(job); terminalTime != nil && download.LogsSavedAt.Before(*terminalTime) {
+		return false
+	}
+	return status != model.ModelDownloadStatusReady || resultPattern.MatchString(download.Logs)
+}
+
+func terminalJobTime(job *batchv1.Job) *time.Time {
+	if job.Status.CompletionTime != nil {
+		return &job.Status.CompletionTime.Time
+	}
+	for i := range job.Status.Conditions {
+		condition := &job.Status.Conditions[i]
+		if condition.Status == v1.ConditionTrue &&
+			(condition.Type == batchv1.JobComplete || condition.Type == batchv1.JobFailed) {
+			return &condition.LastTransitionTime.Time
+		}
+	}
+	return nil
 }
 
 // truncateLogTail keeps at most maxBytes from the end of the logs, starting at
 // a line boundary so the stored tail stays readable.
 func truncateLogTail(logs string, maxBytes int) string {
+	logs = strings.ToValidUTF8(logs, "\uFFFD")
 	if len(logs) <= maxBytes {
 		return logs
 	}
-	tail := logs[len(logs)-maxBytes:]
+	start := len(logs) - maxBytes
+	for start < len(logs) && !utf8.RuneStart(logs[start]) {
+		start++
+	}
+	tail := logs[start:]
 	if idx := strings.IndexByte(tail, '\n'); idx >= 0 && idx+1 < len(tail) {
 		tail = tail[idx+1:]
 	}

@@ -18,10 +18,14 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
+	"unicode/utf8"
 
 	"gorm.io/datatypes"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	batchv1 "k8s.io/api/batch/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/raids-lab/crater/dao/model"
 	"github.com/raids-lab/crater/dao/query"
@@ -60,6 +64,42 @@ func TestStoredLogTailAndDescription(t *testing.T) {
 	}
 	if got := parseDescriptionFromLogs(truncated); got != "Useful repository summary." {
 		t.Fatalf("parseDescriptionFromLogs() = %q", got)
+	}
+}
+
+func TestStoredLogTailRepairsInvalidUTF8(t *testing.T) {
+	logs := "progress: " + string([]byte{0xe2, 0x96, '[', 0xff}) + "\n[RESULT] size_bytes=42\n"
+	truncated := truncateLogTail(logs, 40)
+
+	if len(truncated) > 40 {
+		t.Fatalf("stored log tail has %d bytes, want at most 40", len(truncated))
+	}
+	if !utf8.ValidString(truncated) {
+		t.Fatalf("stored log tail is not valid UTF-8: %q", truncated)
+	}
+	if !strings.Contains(truncated, "[RESULT] size_bytes=42") {
+		t.Fatalf("stored log tail lost the result marker: %q", truncated)
+	}
+}
+
+func TestFinalLogsAreCurrentRejectsProgressSnapshot(t *testing.T) {
+	finishedAt := time.Now()
+	staleAt := finishedAt.Add(-time.Second)
+	currentAt := finishedAt.Add(time.Second)
+	job := &batchv1.Job{Status: batchv1.JobStatus{CompletionTime: &metav1.Time{Time: finishedAt}}}
+	download := &model.ModelDownload{
+		Status:      model.ModelDownloadStatusReady,
+		Logs:        "[PROGRESS] downloaded_bytes=41\n",
+		LogsSavedAt: &staleAt,
+	}
+
+	if finalLogsAreCurrent(job, download, model.ModelDownloadStatusReady) {
+		t.Fatal("progress snapshot saved before job completion was treated as final")
+	}
+	download.LogsSavedAt = &currentAt
+	download.Logs = "Download completed successfully\n[RESULT] size_bytes=42\n"
+	if !finalLogsAreCurrent(job, download, model.ModelDownloadStatusReady) {
+		t.Fatal("completed result log saved after job completion was treated as stale")
 	}
 }
 

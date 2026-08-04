@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/sqlite"
@@ -257,6 +258,12 @@ func TestHuggingFaceDownloadCommandKeepsPaginationOnConfiguredEndpoint(t *testin
 	command := (&ModelDownloadMgr{}).buildDownloadCommand(download, "loveda")
 
 	for _, expected := range []string{
+		`expected = "` + huggingFaceHubVersion + `"`,
+		`if actual != expected:`,
+		`unsupported huggingface_hub version`,
+		`use crater-model-downloader:v1.0.0 or an exact mirror of it`,
+		`if mirror != upstream:`,
+		`except (ImportError, AttributeError) as error:`,
 		"from huggingface_hub.utils import _pagination",
 		`mirror = os.environ.get("HF_ENDPOINT", "https://huggingface.co").rstrip("/")`,
 		`url.startswith(upstream + "/")`,
@@ -273,6 +280,9 @@ func TestHuggingFaceDownloadCommandKeepsPaginationOnConfiguredEndpoint(t *testin
 		if strings.Contains(command, deprecated) {
 			t.Fatalf("download command still contains deprecated argument %q", deprecated)
 		}
+	}
+	if strings.Contains(command, "pip install") {
+		t.Fatal("download command mutates the pinned downloader image at runtime")
 	}
 }
 
@@ -547,11 +557,14 @@ func TestDownloadTokenEnvIsSourceSpecificAndEphemeral(t *testing.T) {
 }
 
 func TestTruncateDownloadLogTail(t *testing.T) {
-	logs := strings.Repeat("old line\n", 20) + "last line\n"
+	logs := strings.Repeat("old line\n", 20) + string([]byte{0xe2, 0x96, '[', 0xff}) + "\nlast line\n"
 	truncated := truncateDownloadLogTail(logs, 32)
 
 	if len(truncated) > 32 || strings.Contains(truncated, "old line\nold line\nold line\nold line") || !strings.HasSuffix(truncated, "last line\n") {
 		t.Fatalf("unexpected truncated log tail: %q", truncated)
+	}
+	if !utf8.ValidString(truncated) {
+		t.Fatalf("truncated log tail is not valid UTF-8: %q", truncated)
 	}
 }
 
