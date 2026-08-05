@@ -225,7 +225,6 @@ func refreshDownload(
 		"source_url":            sourceURL,
 		"display_name":          metadata.DisplayName,
 		"source_description":    metadata.Description,
-		"source_readme":         metadata.Readme,
 		"license":               metadata.License,
 		"task":                  metadata.Task,
 		"library":               metadata.Library,
@@ -237,6 +236,9 @@ func refreshDownload(
 		"source_downloads":      metadata.Downloads,
 		"source_likes":          metadata.Likes,
 		"metadata_refreshed_at": time.Now(),
+	}
+	if strings.TrimSpace(metadata.Readme) != "" {
+		updates["source_readme"] = metadata.Readme
 	}
 	if logo.URL != "" {
 		updates["logo_url"] = logo.URL
@@ -501,10 +503,22 @@ func fetchMetadata(
 	}
 	library := tagValue(payload.Data.Tags, "library:")
 	modelType := tagValue(payload.Data.Tags, "model_type:")
+	readme := cleanReadme(payload.Data.Readme)
+	if strings.TrimSpace(download.Revision) != "" {
+		// The repository metadata endpoint is not revision-aware. Prefer the
+		// README from the exact downloaded revision, and fall back to the
+		// already captured README instead of replacing it with the default one.
+		revisionReadme, readmeErr := fetchModelScopeRevisionReadme(client, selectedEndpoint, download)
+		if readmeErr == nil && strings.TrimSpace(revisionReadme) != "" {
+			readme = cleanReadme(revisionReadme)
+		} else {
+			readme = download.SourceReadme
+		}
+	}
 	return sourceMetadata{
 		DisplayName:    payload.Data.DisplayName,
-		Description:    sourceDescription(payload.Data.Description, cleanReadme(payload.Data.Readme)),
-		Readme:         cleanReadme(payload.Data.Readme),
+		Description:    sourceDescription(payload.Data.Description, readme),
+		Readme:         readme,
 		License:        payload.Data.License,
 		Task:           task,
 		Library:        library,
@@ -520,6 +534,16 @@ func fetchMetadata(
 		UpdatedAt:      &payload.Data.LastModified,
 		Tags:           limitTags(append(payload.Data.Tasks, payload.Data.Tags...)),
 	}, selectedEndpoint, nil
+}
+
+func fetchModelScopeRevisionReadme(
+	client *http.Client, baseEndpoint string, download *model.ModelDownload,
+) (string, error) {
+	if download == nil || strings.TrimSpace(download.Revision) == "" {
+		return "", errors.New("model download revision is required")
+	}
+	endpoint := repositoryURL(download, baseEndpoint) + "/resolve/" + url.PathEscape(strings.TrimSpace(download.Revision)) + "/README.md"
+	return fetchOptionalText(client, endpoint, maxStoredReadmeBytes)
 }
 
 func fetchOptionalText(client *http.Client, endpoint string, limit int) (string, error) {
