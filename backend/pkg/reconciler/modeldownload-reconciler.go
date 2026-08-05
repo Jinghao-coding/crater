@@ -802,7 +802,9 @@ func (r *ModelDownloadReconciler) ensureFinalLogs(
 	if finalLogsAreCurrent(job, download, status) {
 		return false
 	}
-	r.persistFinalLogs(ctx, job, download)
+	if _, err := r.persistFinalLogs(ctx, job, download); err != nil {
+		return true
+	}
 	return !finalLogsAreCurrent(job, download, status)
 }
 
