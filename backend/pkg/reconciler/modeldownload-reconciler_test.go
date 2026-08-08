@@ -21,11 +21,16 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/go-logr/logr"
 	"gorm.io/datatypes"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	batchv1 "k8s.io/api/batch/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/raids-lab/crater/dao/model"
 	"github.com/raids-lab/crater/dao/query"
@@ -101,6 +106,112 @@ func TestFinalLogsAreCurrentRejectsProgressSnapshot(t *testing.T) {
 	if !finalLogsAreCurrent(job, download, model.ModelDownloadStatusReady) {
 		t.Fatal("completed result log saved after job completion was treated as stale")
 	}
+}
+
+func TestPausedDownloadDeletesLiveJobWithoutChangingState(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := batchv1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "paused-download", Namespace: "jobs"}}
+	reconciler := &ModelDownloadReconciler{
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(job).Build(),
+	}
+	download := &model.ModelDownload{Status: model.ModelDownloadStatusPaused}
+
+	result, err := reconciler.syncDownloadWithJob(t.Context(), job, download, logr.Discard())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.RequeueAfter != 0 {
+		t.Fatalf("syncDownloadWithJob() result = %#v, want no requeue", result)
+	}
+	if download.Status != model.ModelDownloadStatusPaused {
+		t.Fatalf("paused download status changed to %s", download.Status)
+	}
+	var deleted batchv1.Job
+	err = reconciler.Get(t.Context(), types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, &deleted)
+	if !k8serrors.IsNotFound(err) {
+		t.Fatalf("paused download Job still exists or lookup failed: %v", err)
+	}
+}
+
+func newMissingJobTransitionTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{
+		DisableForeignKeyConstraintWhenMigrating: true,
+		IgnoreRelationshipsWhenMigrating:         true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.ModelDownload{}, &model.ModelDownloadSubmission{}); err != nil {
+		t.Fatal(err)
+	}
+	query.SetDefault(db)
+	return db
+}
+
+func TestMissingJobTransitionPreservesPausedDownload(t *testing.T) {
+	db := newMissingJobTransitionTestDB(t)
+	reconciler := &ModelDownloadReconciler{}
+
+	paused := model.ModelDownload{
+		Name: "owner/paused", Source: model.ModelSourceModelScope,
+		Category: model.DownloadCategoryModel, Revision: "main", Path: "public/Models/owner/paused",
+		Status: model.ModelDownloadStatusPaused, Message: "Download paused by user", JobName: "paused-job", CreatorID: 7,
+	}
+	if err := db.Create(&paused).Error; err != nil {
+		t.Fatal(err)
+	}
+	status, transitioned, err := reconciler.failMissingJobIfActive(t.Context(), paused.JobName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if transitioned || status != model.ModelDownloadStatusPaused {
+		t.Fatalf("paused missing Job transition = %t/%s, want false/Paused", transitioned, status)
+	}
+	var storedPaused model.ModelDownload
+	if err := db.First(&storedPaused, paused.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if storedPaused.Status != model.ModelDownloadStatusPaused || storedPaused.Message != "Download paused by user" {
+		t.Fatalf("paused download was overwritten: %#v", storedPaused)
+	}
+}
+
+func TestMissingJobTransitionFailsActiveDownload(t *testing.T) {
+	db := newMissingJobTransitionTestDB(t)
+	reconciler := &ModelDownloadReconciler{}
+	active := model.ModelDownload{
+		Name: "owner/active", Source: model.ModelSourceModelScope,
+		Category: model.DownloadCategoryModel, Revision: "main", Path: "public/Models/owner/active",
+		Status: model.ModelDownloadStatusDownloading, JobName: "active-job", CreatorID: 7,
+	}
+	if err := db.Create(&active).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&model.ModelDownloadSubmission{
+		UserID: 7, ModelDownloadID: active.ID,
+		Action: model.ModelDownloadSubmissionCreate, Status: model.ModelDownloadSubmissionReserved,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	status, transitioned, err := reconciler.failMissingJobIfActive(t.Context(), active.JobName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !transitioned || status != model.ModelDownloadStatusFailed {
+		t.Fatalf("active missing Job transition = %t/%s, want true/Failed", transitioned, status)
+	}
+	var storedActive model.ModelDownload
+	if err := db.First(&storedActive, active.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if storedActive.Status != model.ModelDownloadStatusFailed || storedActive.Message != "Job was deleted" {
+		t.Fatalf("unexpected active missing Job state: %#v", storedActive)
+	}
+	assertQuotaSubmissionSettlement(t, db, active.ID, model.ModelDownloadSubmissionReleased, false)
 }
 
 func TestParseRepositoryMetadata(t *testing.T) {
