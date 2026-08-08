@@ -173,6 +173,85 @@ func TestParseRepositoryMetadataRejectsMissingPayload(t *testing.T) {
 	}
 }
 
+func TestReadyArtifactSyncAllowsMissingRepositoryMetadata(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:missing_repository_metadata?mode=memory&cache=shared"), &gorm.Config{
+		DisableForeignKeyConstraintWhenMigrating: true,
+		IgnoreRelationshipsWhenMigrating:         true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(
+		&model.ModelDownload{}, &model.ModelDownloadSubmission{},
+		&model.Dataset{}, &model.UserDataset{}, &model.AccountDataset{},
+	); err != nil {
+		t.Fatal(err)
+	}
+	query.SetDefault(db)
+
+	download := model.ModelDownload{
+		Name: "owner/result-only", Source: model.ModelSourceModelScope,
+		Category: model.DownloadCategoryModel, Revision: "master",
+		Path: "storage/Models/owner/result-only", CreatorID: 7,
+		Status: model.ModelDownloadStatusDownloading,
+	}
+	if err := db.Create(&download).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&model.ModelDownloadSubmission{
+		UserID: 7, ModelDownloadID: download.ID,
+		Action: model.ModelDownloadSubmissionCreate, Status: model.ModelDownloadSubmissionReserved,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	scheme := runtime.NewScheme()
+	if err := v1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	pod := &v1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "download-result-only-pod", Namespace: "jobs", Labels: map[string]string{"job-name": "download-result-only"},
+	}}
+	reconciler := &ModelDownloadReconciler{
+		Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(pod).Build(),
+		podLogs: func(context.Context, *v1.Pod) (string, error) {
+			return "[RESULT] size_bytes=42\n", nil
+		},
+		db: db,
+	}
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: "download-result-only", Namespace: "jobs"},
+		Status: batchv1.JobStatus{Conditions: []batchv1.JobCondition{{
+			Type: batchv1.JobComplete, Status: v1.ConditionTrue,
+		}}},
+	}
+
+	result, err := reconciler.syncDownloadWithJob(context.Background(), job, &download, logr.Discard())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Requeue || result.RequeueAfter != 0 {
+		t.Fatalf("syncDownloadWithJob() result = %#v, want completed reconciliation", result)
+	}
+
+	var stored model.ModelDownload
+	if err := db.First(&stored, download.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != model.ModelDownloadStatusReady || stored.SizeBytes != 42 {
+		t.Fatalf("result-only download did not become Ready: %#v", stored)
+	}
+	assertQuotaSubmissionSettlement(t, db, download.ID, model.ModelDownloadSubmissionSucceeded, true)
+
+	var datasetCount int64
+	if err := db.Model(&model.Dataset{}).Count(&datasetCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if datasetCount != 1 {
+		t.Fatalf("result-only download created %d datasets, want 1", datasetCount)
+	}
+}
+
 func TestReadyArtifactSyncRetriesWhenFinalLogsAreUnavailable(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := v1.AddToScheme(scheme); err != nil {

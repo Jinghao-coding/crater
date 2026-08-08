@@ -254,16 +254,18 @@ func (r *ModelDownloadReconciler) syncReadyArtifacts(
 		return fmt.Errorf("persist final download logs: %w", err)
 	}
 	metadata, err := parseRepositoryMetadata(logs)
-	if err != nil {
+	if err != nil && !errors.Is(err, errRepositoryPayloadMissing) {
 		return fmt.Errorf("parse repository metadata: %w", err)
 	}
 	readmeDescription := parseDescriptionFromLogs(logs)
-	if metadata.Description == "" && readmeDescription != "" {
-		metadata.Description = readmeDescription
-		metadata.markPresent("description")
-	}
-	if err := r.persistRepositoryMetadata(ctx, download, &metadata); err != nil {
-		return fmt.Errorf("persist repository metadata: %w", err)
+	if metadata.hasPayload() {
+		if metadata.Description == "" && readmeDescription != "" {
+			metadata.Description = readmeDescription
+			metadata.markPresent("description")
+		}
+		if err := r.persistRepositoryMetadata(ctx, download, &metadata); err != nil {
+			return fmt.Errorf("persist repository metadata: %w", err)
+		}
 	}
 	if err := r.createDatasetForModel(ctx, download, readmeDescription, metadata.Tags); err != nil {
 		return fmt.Errorf("create dataset for model: %w", err)
