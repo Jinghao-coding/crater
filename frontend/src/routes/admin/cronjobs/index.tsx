@@ -185,7 +185,6 @@ function CronPolicy({ className }: { className?: string }) {
               status={currentStatus}
               spec={config.spec}
               params={config.config as Record<string, number | string | string[]>}
-              lastExecuteTime={config.lastExecuteTime}
               onUpdate={() => {
                 jobsQuery.refetch()
                 statusQuery.refetch()

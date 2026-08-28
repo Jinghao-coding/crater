@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 import { useMutation } from '@tanstack/react-query'
-import { CalendarClockIcon, Clock3Icon, PlayIcon, SlidersHorizontalIcon } from 'lucide-react'
+import { CalendarClockIcon, PlayIcon, SlidersHorizontalIcon } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -67,7 +67,6 @@ export interface CronJobCardProps {
   status: CronJobConfigStatus
   spec: string
   params: Record<string, number | string | string[]>
-  lastExecuteTime?: string
   onUpdate: () => void
 }
 
@@ -126,10 +125,9 @@ export default function CronJobCard({
   status,
   spec,
   params,
-  lastExecuteTime,
   onUpdate,
 }: CronJobCardProps) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const [enabled, setEnabled] = useState(status !== CronJobConfigStatus.Suspended)
   const [cronSpec, setCronSpec] = useState(spec)
   const [jobParams, setJobParams] = useState(params)
@@ -234,19 +232,6 @@ export default function CronJobCard({
     return t('cronPolicy.scheduleCustom')
   }
 
-  const getLastExecution = () => {
-    if (!lastExecuteTime) return t('cronPolicy.neverExecuted')
-    const date = new Date(lastExecuteTime)
-    if (Number.isNaN(date.getTime())) return t('cronPolicy.neverExecuted')
-
-    return new Intl.DateTimeFormat(i18n.resolvedLanguage, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date)
-  }
-
   const renderParamInput = (key: string, value: number | string | string[]) => {
     if (HIDDEN_PARAMS.includes(key) || Array.isArray(value)) {
       return null
@@ -298,20 +283,11 @@ export default function CronJobCard({
           </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div className="bg-muted/45 flex min-w-0 items-center gap-3 rounded-lg px-3 py-2.5">
-            <CalendarClockIcon className="text-primary size-4 shrink-0" />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{getScheduleSummary(cronSpec)}</p>
-              <p className="text-muted-foreground truncate font-mono text-xs">{cronSpec}</p>
-            </div>
-          </div>
-          <div className="bg-muted/45 flex min-w-0 items-center gap-3 rounded-lg px-3 py-2.5">
-            <Clock3Icon className="text-muted-foreground size-4 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-muted-foreground text-xs">{t('cronPolicy.lastExecuted')}</p>
-              <p className="truncate text-sm font-medium">{getLastExecution()}</p>
-            </div>
+        <div className="bg-muted/45 flex min-w-0 items-center gap-3 rounded-lg px-3 py-2.5">
+          <CalendarClockIcon className="text-primary size-4 shrink-0" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{getScheduleSummary(cronSpec)}</p>
+            <p className="text-muted-foreground truncate font-mono text-xs">{cronSpec}</p>
           </div>
         </div>
 
