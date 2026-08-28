@@ -126,6 +126,34 @@ func TestNormalizeListFlagValuesTrimsAndDeduplicates(t *testing.T) {
 	}
 }
 
+func TestReadListFlagValuesSupportsSingleRepeatedAndCommaSeparatedValues(t *testing.T) {
+	for name, test := range map[string]struct {
+		args []string
+		want []string
+	}{
+		"single": {
+			args: []string{"--status", "Running"},
+			want: []string{"Running"},
+		},
+		"repeated and comma-separated": {
+			args: []string{"--status", "Running", "--status", "Pending,Failed"},
+			want: []string{"Running", "Pending", "Failed"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().StringSlice("status", nil, "")
+			if err := cmd.Flags().Parse(test.args); err != nil {
+				t.Fatal(err)
+			}
+			got := normalizeListFlagValues(readListFlagValues(cmd, "status"))
+			if !slices.Equal(got, test.want) {
+				t.Fatalf("status values = %#v, want %#v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestJobListFilterIssuesEnforcesBackendLimits(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.Flags().Int("days", 0, "")

@@ -222,7 +222,7 @@
 | 位置 | 失败时 | 成功时 |
 |------|--------|--------|
 | `cmd/*` 各命令 `RunE` | 编排业务；失败则 `return err`。常规路径不要自行往 stderr 写错误 JSON，由 `Execute` → `handleError` 写 stderr 并退出。 | 在 `return nil` 之前完成成功输出，且只在此处写成功内容：`--json` 时用 `internal/output` 的 `WriteSuccessJSON`、`SuccessEnvelope`；否则用 `fmt` 与 `i18n` 写 stdout。`root` 不会替你拼成功 JSON。 |
-| `cmd/root.go` 的 `Execute` | `rootCmd.Execute()` 非 nil 时调用 `handleError(err)`，再经 `exitCodeFor` 使用 `pkg/errorcodes.ExitCodeForCategory` 映射退出码并 `os.Exit`。 | `RunE` 成功返回后不再写 stdout；业务成功输出已在各命令内写完。 |
+| `cmd/root.go` 的 `Execute` | `rootCmd.Execute()` 非 nil 时调用 `handleError(err)`，再经 `exitCodeFor` 使用 `pkg/errorcodes.ExitCodeForCategory` 映射退出码并 `os.Exit`。 | `RunE` 成功返回后不再写 stdout；业务成功输出已在各命令内写完。需要信号取消的长连接由对应命令局部创建 signal-aware context，例如 `job logs --follow`。 |
 
 ### 失败：`return` 什么
 
