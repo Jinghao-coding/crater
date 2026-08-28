@@ -1,6 +1,6 @@
 ---
 name: crater-cli-job
-version: 0.3.0
+version: 0.3.1
 description: "Use Crater CLI job commands to list, inspect, view logs, create, stop, and snapshot jobs."
 metadata:
   requires:
