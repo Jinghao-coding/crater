@@ -68,11 +68,14 @@ export function PrequeueSettings({
         <div className="grid gap-4 md:grid-cols-2">
           <div className="flex items-center justify-between rounded-lg border p-4 shadow-sm">
             <div>
-              <Label className="text-base">{t('systemConfig.prequeue.backfillSwitchLabel')}</Label>
+              <Label htmlFor="prequeue-backfill-enabled" className="text-base">
+                {t('systemConfig.prequeue.backfillSwitchLabel')}
+              </Label>
             </div>
             <div className="flex items-center gap-2">
               {isPending && <Loader2Icon className="text-muted-foreground h-4 w-4 animate-spin" />}
               <Switch
+                id="prequeue-backfill-enabled"
                 checked={backfillEnabled}
                 onCheckedChange={onBackfillEnabledChange}
                 disabled={isPending}
@@ -82,13 +85,14 @@ export function PrequeueSettings({
 
           <div className="flex items-center justify-between rounded-lg border p-4 shadow-sm">
             <div>
-              <Label className="text-base">
+              <Label htmlFor="prequeue-quota-enabled" className="text-base">
                 {t('systemConfig.prequeue.queueQuotaSwitchLabel')}
               </Label>
             </div>
             <div className="flex items-center gap-2">
               {isPending && <Loader2Icon className="text-muted-foreground h-4 w-4 animate-spin" />}
               <Switch
+                id="prequeue-quota-enabled"
                 checked={queueQuotaEnabled}
                 onCheckedChange={onQueueQuotaEnabledChange}
                 disabled={isPending}
@@ -159,9 +163,9 @@ export function PrequeueSettings({
           </div>
         </div>
       </CardContent>
-      <CardFooter className="bg-muted/10 px-6 py-4">
+      <CardFooter className="bg-muted/10 justify-end border-t px-6 py-4">
         <Button type="button" onClick={onSubmit} disabled={isPending}>
-          <SaveIcon className="mr-2 h-4 w-4" />
+          <SaveIcon />
           {t('systemConfig.prequeue.save')}
         </Button>
       </CardFooter>
