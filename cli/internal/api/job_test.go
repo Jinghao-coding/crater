@@ -241,6 +241,40 @@ func TestListJobsSendsPagingAndServerFilters(t *testing.T) {
 	}
 }
 
+func TestListJobsSendsShortcutJobTypes(t *testing.T) {
+	tests := []struct {
+		name    string
+		options JobListOptions
+		want    []string
+	}{
+		{
+			name:    "interactive",
+			options: JobListOptions{Interactive: true},
+			want:    []string{"jupyter", "webide"},
+		},
+		{
+			name:    "batch",
+			options: JobListOptions{Batch: true},
+			want:    []string{"custom", "pytorch", "tensorflow", "kuberay", "deepspeed", "openmpi"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := jobTestClient(t, func(writer http.ResponseWriter, request *http.Request) {
+				if got := request.URL.Query()["job_type"]; !reflect.DeepEqual(got, tt.want) {
+					t.Fatalf("job_type = %v, want %v", got, tt.want)
+				}
+				writeJobTestResponse(t, writer, Page[JobInfo]{})
+			})
+
+			if _, err := client.ListJobs(tt.options); err != nil {
+				t.Fatalf("ListJobs returned error: %v", err)
+			}
+		})
+	}
+}
+
 func TestFetchAllJobPagesSequentially(t *testing.T) {
 	requested := make([]string, 0, 2)
 	client := jobTestClient(t, func(writer http.ResponseWriter, request *http.Request) {

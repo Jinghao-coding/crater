@@ -40,7 +40,7 @@ For Jupyter/WebIDE access commands, the returned token or password is sensitive.
 
 ## Common Workflows
 
-List running GPU jobs for a user:
+List running or pending PyTorch/TensorFlow jobs for a user:
 
 ```bash
 crater job ls \
