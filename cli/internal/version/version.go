@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	// v4 allows model/dataset downloads to reuse another source or revision.
-	APIVersion = 4
+	// v5 adds optional task-user SSH sessions and container command execution.
+	APIVersion = 5
 	// v3 first exposes /admin/system-config/scheduler-extender, which this CLI calls with no fallback.
 	MinSupportedBackendAPIVersion    = 3
 	APIVersionHeader                 = "X-Crater-API-Version"
